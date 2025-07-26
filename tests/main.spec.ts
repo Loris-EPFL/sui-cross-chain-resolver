@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import {expect, jest} from '@jest/globals'
+import {expect, jest, describe, it, beforeAll, afterAll} from '@jest/globals'
 
 import {createServer, CreateServerReturnType} from 'prool'
 import {anvil} from 'prool/instances'
@@ -25,6 +25,12 @@ import factoryContract from '../dist/contracts/TestEscrowFactory.sol/TestEscrowF
 import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
 
 const {Address} = Sdk
+
+// Mock SDK instance pointing to our custom backend
+const mockSdk = new Sdk.SDK({
+    url: 'http://localhost:3001/mock-1inch-api', // Our mock backend URL
+    authKey: 'mock-auth-key' // Mock auth key
+})
 
 jest.setTimeout(1000 * 60)
 
