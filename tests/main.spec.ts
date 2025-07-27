@@ -26,11 +26,7 @@ import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
 
 const {Address} = Sdk
 
-// Mock SDK instance pointing to our custom backend
-const mockSdk = new Sdk.SDK({
-    url: 'http://localhost:3001/mock-1inch-api', // Our mock backend URL
-    authKey: 'mock-auth-key' // Mock auth key
-})
+
 
 jest.setTimeout(1000 * 60)
 
