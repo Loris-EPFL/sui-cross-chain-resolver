@@ -45,7 +45,7 @@ export class Direct1inchApiClient {
         this.baseUrl = baseUrl;
         this.authKey = authKey;
         this.client = axios.create({
-            baseURL: `${baseUrl}/mock-1inch-api`,
+            baseURL: baseUrl,
             headers: {
                 'Authorization': `Bearer ${authKey}`,
                 'Content-Type': 'application/json'
@@ -95,8 +95,8 @@ export class Direct1inchApiClient {
                 takerAsset: quote.dstTokenAddress,
                 maker: orderParams.walletAddress,
                 receiver: orderParams.walletAddress,
-                makingAmount: quote.srcAmount,
-                takingAmount: quote.dstAmount,
+                makingAmount: quote.srcTokenAmount,
+                takingAmount: quote.dstTokenAmount,
                 makerTraits: "0"
             },
             srcChainId: quote.srcChainId,
