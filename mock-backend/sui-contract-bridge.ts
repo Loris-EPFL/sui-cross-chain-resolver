@@ -98,15 +98,9 @@ export class SuiHTLCBridge {
         try {
             const tx = new TransactionBlock();
             
-            // Get the Clock object - following bootcamp pattern
-            const clock = tx.moveCall({
-                target: '0x2::clock::clock',
-                arguments: []
-            });
-            
             // Split coins for the lock amount and safety deposit
-            const [lockCoin] = tx.splitCoins(tx.gas, [params.amount]);
-            const [depositCoin] = tx.splitCoins(tx.gas, [params.safetyDeposit]);
+            const [lockCoin] = tx.splitCoins(tx.gas, [tx.pure(params.amount)]);
+            const [depositCoin] = tx.splitCoins(tx.gas, [tx.pure(params.safetyDeposit)]);
             
             // Convert hashLock from hex string to byte array
             const hashLockBytes = Array.from(Buffer.from(params.hashLock.slice(2), 'hex'));
@@ -114,9 +108,9 @@ export class SuiHTLCBridge {
             // Call the Move contract function with ALL required arguments
             tx.moveCall({
                 target: `${SUI_PACKAGE_ID}::oneinch_move::create_lock_object`,
-                typeArguments: ['0x2::sui::SUI'], // ✅ ADDED: Type arguments
+                typeArguments: ['0x2::sui::SUI'], 
                 arguments: [
-                    tx.object('0x6'),                                    // ✅ FIXED: Use clock object
+                    tx.object('0x6'),                                    
                     tx.pure(params.withdrawalMs),             // withdrawal_ms: u64
                     tx.pure(params.publicWithdrawalMs),       // public_withdrawal_ms: u64
                     tx.pure(params.cancellationMs),           // cancellation_ms: u64
@@ -196,28 +190,21 @@ export class SuiHTLCBridge {
         try {
             const tx = new TransactionBlock();
             
-            // Get the Clock object - following bootcamp pattern
-            const clock = tx.moveCall({
-                target: '0x2::clock::clock',
-                arguments: []
-            });
-            
-            // Convert secret to byte array
-            const secretBytes = Array.from(Buffer.from(params.secret, 'utf8'));
             
             // Call the Move contract function
             tx.moveCall({
                 target: `${SUI_PACKAGE_ID}::oneinch_move::withdraw`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
-                    tx.object(params.lockId),     // lock: LockObject<T>
-                    clock,                         // clock: &Clock
-                    tx.pure(secretBytes),          // secret: vector<u8>
-                    tx.object('0x6')               // ctx: &mut TxContext
-                ]
-            });
+                  tx.object(params.lockId),                  // LockObject<T> (shared)
+                  tx.object('0x6'),                          // &Clock shared object
+                  tx.pure(Array.from(Buffer.from(params.secret, 'utf8'))), // vector<u8>
+                ],
+              });
 
             console.log('📝 Withdrawal transaction created, executing...');
+
+            tx.setGasBudget(10_000_000);
             
             const result = await this.client.signAndExecuteTransactionBlock({
                 transactionBlock: tx,
@@ -266,24 +253,18 @@ export class SuiHTLCBridge {
         try {
             const tx = new TransactionBlock();
             
-            // Get the Clock object - following bootcamp pattern
-            const clock = tx.moveCall({
-                target: '0x2::clock::clock',
-                arguments: []
-            });
-            
-            // Call the Move contract function
             tx.moveCall({
                 target: `${SUI_PACKAGE_ID}::oneinch_move::cancel`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
-                    tx.object(params.lockId), // lock: LockObject<T>
-                    clock,                     // clock: &Clock
-                    tx.object('0x6')           // ctx: &mut TxContext
-                ]
-            });
+                  tx.object(params.lockId),
+                  tx.object('0x6'),
+                ],
+              });
 
             console.log('📝 Cancellation transaction created, executing...');
+
+            tx.setGasBudget(10_000_000);
             
             const result = await this.client.signAndExecuteTransactionBlock({
                 transactionBlock: tx,
@@ -388,15 +369,15 @@ export async function exampleUsage() {
         console.log('=== Step 3: Create HTLC Lock Object ===');
         const createParams: HTLCLockParams = {
             hashLock: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-            amount: '1000000000', // 1 SUI in MIST
-            recipient: '0x1234567890123456789012345678901234567890123456789012345678901234',
-            refund: '0x1234567890123456789012345678901234567890123456789012345678901234',
-            withdrawalMs: 3600000, // 1 hour
-            publicWithdrawalMs: 7200000, // 2 hours
-            cancellationMs: 1800000, // 30 minutes
-            publicCancellationMs: 3600000, // 1 hour
+            amount: '1000000', // 1 SUI in MIST
+            recipient: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
+            refund: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
+            withdrawalMs: 600000, // 1 minute
+            publicWithdrawalMs: 120000, // 2 minutes
+            cancellationMs: 180000, // 3 minutes
+            publicCancellationMs: 240000, // 4 minutes
             secretLength: 16,
-            safetyDeposit: '100000000' // 0.1 SUI in MIST
+            safetyDeposit: '100000' // 0.1 SUI in MIST
         };
 
         const createResult = await bridge.createLockObject(createParams);
@@ -423,13 +404,13 @@ export async function exampleUsage() {
             // console.log('');
 
             // Uncomment to test cancellation
-            // console.log('=== Step 6: Cancel Lock Object ===');
-            // const cancelParams: HTLCCancelParams = {
-            //     lockId: createResult.lockId
-            // };
-            // const cancelResult = await bridge.cancelLock(cancelParams);
-            // console.log('Cancel result:', cancelResult);
-            // console.log('');
+            console.log('=== Step 6: Cancel Lock Object ===');
+            const cancelParams: HTLCCancelParams = {
+                lockId: createResult.lockId
+            };
+            const cancelResult = await bridge.cancelLock(cancelParams);
+            console.log('Cancel result:', cancelResult);
+            console.log('');
         } else {
             console.error('❌ Failed to create lock:', createResult.error);
         }

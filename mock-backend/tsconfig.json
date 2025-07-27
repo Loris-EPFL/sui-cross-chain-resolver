@@ -17,7 +17,7 @@
   "include": [
     "*.ts",
     "**/*.ts"
-  ],
+, "../tests/test-bridge-cancel.ts", "../tests/test-bridge-comprehensive.ts", "../tests/test-bridge-create.ts", "../tests/test-bridge-utility.ts", "../tests/test-bridge-withdraw.ts"  ],
   "exclude": [
     "node_modules",
     "dist"

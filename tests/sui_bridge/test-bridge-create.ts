@@ -1,4 +1,4 @@
-import { SuiHTLCBridge, HTLCLockParams, HTLCWithdrawParams, HTLCCancelParams } from './sui-contract-bridge';
+import { SuiHTLCBridge, HTLCLockParams, HTLCWithdrawParams, HTLCCancelParams } from '../../mock-backend/sui-contract-bridge';
 
 /**
  * Test the Sui HTLC Bridge System

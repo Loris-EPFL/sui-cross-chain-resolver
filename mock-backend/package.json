@@ -9,7 +9,13 @@
     "sui": "ts-node sui_server.ts",
     "sui:dev": "nodemon --exec ts-node sui_server.ts",
     "sui-client": "ts-node sui-client.ts",
-    "test-bridge": "ts-node test-bridge.ts"
+    "test-bridge": "ts-node test-bridge.ts",
+    "test-bridge-create": "ts-node ../tests/sui_bridge/test-bridge-create.ts",
+    "test-bridge-withdraw": "ts-node ../tests/sui_bridge/test-bridge-withdraw.ts",
+    "test-bridge-cancel": "ts-node ../tests/sui_bridge/test-bridge-cancel.ts",
+    "test-bridge-utility": "ts-node ../tests/sui_bridge/test-bridge-utility.ts",
+    "test-bridge-comprehensive": "ts-node ../tests/sui_bridge/test-bridge-comprehensive.ts",
+    "test-all": "npm run test-bridge-create && npm run test-bridge-withdraw && npm run test-bridge-cancel && npm run test-bridge-utility"
   },
   "dependencies": {
     "@mysten/sui.js": "^0.50.0",
