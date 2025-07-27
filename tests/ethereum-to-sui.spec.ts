@@ -3,7 +3,7 @@ import {createWalletClient, createPublicClient, http, parseUnits, keccak256, toH
 import {privateKeyToAccount} from 'viem/accounts'
 import {sepolia} from 'viem/chains'
 import {SuiClient, getFullnodeUrl} from '@mysten/sui/client'
-import {TransactionBlock} from '@mysten/sui/transactions'
+import { Transaction } from "@mysten/sui/transactions";
 import {Ed25519Keypair} from '@mysten/sui/keypairs/ed25519'
 import {randomBytes} from 'crypto'
 import {getEthereumConfig, getSuiConfig} from './contract-addresses'
@@ -78,21 +78,47 @@ class EthereumResolver {
     }
 
     /**
-     * Deploy source escrow (simplified for mock API testing)
+     * Deploy source escrow using actual contract interaction
      */
-    async deploySrc(tokenAddress: `0x${string}`, amount: bigint, hashLock: string, recipient: string) {
+    async deploySrc(
+        immutables: any,
+        order: any,
+        signature: string,
+        takerTraits: any,
+        amount: bigint
+    ): Promise<{txHash: string; blockHash: string; escrowAddress: string}> {
         try {
-            // Simplified escrow deployment for testing
-            // In real implementation, this would call the actual resolver contract
-            const mockTxHash = `0x${randomBytes(32).toString('hex')}`
+            // Parse signature components
+            const r = signature.slice(0, 66) as `0x${string}`
+            const vs = `0x${signature.slice(66)}` as `0x${string}`
 
-            console.log(`🔧 Mock deploySrc: ${amount} tokens locked with hashLock ${hashLock}`)
-            console.log(`📍 Mock transaction hash: ${mockTxHash}`)
+            // Call the resolver contract's deploySrc function
+            const hash = await this.walletClient.writeContract({
+                address: this.resolverAddress as `0x${string}`,
+                abi: RESOLVER_ABI,
+                functionName: 'deploySrc',
+                args: [
+                    immutables,
+                    order,
+                    r,
+                    vs,
+                    amount,
+                    takerTraits,
+                    '0x' // args parameter
+                ],
+                value: order.escrowExtension?.srcSafetyDeposit || 0n
+            })
+
+            // Wait for transaction receipt
+            const receipt = await this.publicClient.waitForTransactionReceipt({hash})
+
+            console.log(`🔧 Deployed source escrow with amount: ${amount}`)
+            console.log(`📍 Transaction hash: ${hash}`)
 
             return {
-                txHash: mockTxHash,
-                blockHash: `0x${randomBytes(32).toString('hex')}`,
-                escrowAddress: `0x${randomBytes(20).toString('hex')}`
+                txHash: hash,
+                blockHash: receipt.blockHash,
+                escrowAddress: receipt.contractAddress || `0x${randomBytes(20).toString('hex')}`
             }
         } catch (error) {
             console.error('Error in deploySrc:', error)
@@ -166,14 +192,41 @@ class EthereumResolver {
     }
 
     /**
-     * Generate mock signature for testing
+     * Sign order using EIP-712 typed data
      */
-    async signOrder(): Promise<string> {
+    async signOrder(chainId: number, order: any): Promise<string> {
         try {
-            // Mock signature for testing purposes
-            const mockSignature = '0x' + '0'.repeat(130)
+            // Create EIP-712 typed data structure
+            const domain = {
+                name: '1inch Limit Order Protocol',
+                version: '4',
+                chainId: chainId,
+                verifyingContract: this.resolverAddress as `0x${string}`
+            }
 
-            return mockSignature
+            const types = {
+                Order: [
+                    {name: 'salt', type: 'uint256'},
+                    {name: 'maker', type: 'address'},
+                    {name: 'receiver', type: 'address'},
+                    {name: 'makerAsset', type: 'address'},
+                    {name: 'takerAsset', type: 'address'},
+                    {name: 'makingAmount', type: 'uint256'},
+                    {name: 'takingAmount', type: 'uint256'},
+                    {name: 'makerTraits', type: 'uint256'}
+                ]
+            }
+
+            // Sign the typed data
+            const signature = await this.walletClient.signTypedData({
+                account: this.account,
+                domain,
+                types,
+                primaryType: 'Order',
+                message: order
+            })
+
+            return signature
         } catch (error) {
             console.error('Error signing order:', error)
             throw error
@@ -212,17 +265,17 @@ class SuiResolver {
     async deployDst(coinType: string, amount: bigint, hashLock: string, recipient: string): Promise<{ escrowId: string; txHash: string }> {
         try {
             console.log(`🔧 Deploying destination escrow on Sui with amount ${amount}`)
-            const txb = new TransactionBlock()
+            const tx = new Transaction()
 
             // Mock escrow deployment
-            txb.moveCall({
+            tx.moveCall({
                 target: `${this.packageId}::escrow::create_escrow`,
-                arguments: [txb.pure(coinType), txb.pure(amount.toString()), txb.pure(hashLock), txb.pure(recipient)]
+                arguments: [tx.pure.string(coinType), tx.pure.u64(amount.toString()), tx.pure.string(hashLock), tx.pure.address(recipient)]
             })
 
             const result = await this.client.signAndExecuteTransaction({
                 signer: this.keypair,
-                transaction: txb
+                transaction: tx
             })
 
             console.log(`✅ Sui escrow deployed: ${result.digest}`)
@@ -240,16 +293,16 @@ class SuiResolver {
     async withdraw(escrowId: string, secret: string): Promise<{ txHash: string; receipt: any }> {
         try {
             console.log(`🔓 Withdrawing from Sui escrow ${escrowId} with secret`)
-            const txb = new TransactionBlock()
+            const tx = new Transaction()
 
-            txb.moveCall({
+            tx.moveCall({
                 target: `${this.packageId}::escrow::withdraw`,
-                arguments: [txb.object(escrowId), txb.pure(secret)]
+                arguments: [tx.object(escrowId), tx.pure.string(secret)]
             })
 
             const result = await this.client.signAndExecuteTransaction({
                 signer: this.keypair,
-                transaction: txb
+                transaction: tx
             })
 
             return {
@@ -364,13 +417,36 @@ class CrossChainOrderManager {
         try {
             console.log('⚡ Executing Ethereum side of swap...')
 
-            // Simplified escrow deployment using mock API
+            // Create mock immutables and order for testing
             const hashLock = keccak256(toHex(secret))
+            const mockImmutables = {
+                orderHash: hashLock,
+                hashLock: hashLock,
+                maker: this.ethereumResolver.getAddress(),
+                taker: this.ethereumResolver.getAddress(),
+                token: TEST_CONFIG.ethereum.tokens.USDC.address,
+                amount: amount,
+                safetyDeposit: 0n,
+                timelocks: 0n
+            }
+            const mockOrder = {
+                salt: 0n,
+                maker: this.ethereumResolver.getAddress(),
+                receiver: this.ethereumResolver.getAddress(),
+                makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
+                takerAsset: TEST_CONFIG.sui.tokens.USDC.address,
+                makingAmount: amount,
+                takingAmount: amount,
+                makerTraits: 0n
+            }
+            const mockTakerTraits = 0n
+            
             const result = await this.ethereumResolver.deploySrc(
-                TEST_CONFIG.ethereum.tokens.USDC.address,
-                amount,
-                hashLock,
-                this.ethereumResolver.getAddress()
+                mockImmutables,
+                mockOrder,
+                signature,
+                mockTakerTraits,
+                amount
             )
 
             console.log('✅ Ethereum escrow deployed:', result.txHash)
