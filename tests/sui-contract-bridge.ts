@@ -15,9 +15,9 @@ if (!SUI_PACKAGE_ID) {
     throw new Error('SUI_PACKAGE_ID environment variable is required');
 }
 
-if (!SUI_UPGRADE_CAP_ID) {
-    throw new Error('SUI_UPGRADE_CAP_ID environment variable is required');
-}
+// if (!SUI_UPGRADE_CAP_ID) {
+//     throw new Error('SUI_UPGRADE_CAP_ID environment variable is required');
+// }
 
 // Types for the bridge system
 export interface HTLCLockParams {
@@ -67,10 +67,10 @@ export class SuiHTLCBridge {
         // Initialize keypair with proper error handling
         if (privateKey) {
             // Use provided private key
-            this.keypair = Ed25519Keypair.fromSecretKey(new Uint8Array(Buffer.from(privateKey, "hex")));
+            this.keypair = Ed25519Keypair.fromSecretKey(privateKey);
         } else if (SUI_PRIVATE_KEY && SUI_PRIVATE_KEY.trim() !== "" && SUI_PRIVATE_KEY !== "undefined") {
             // Use environment variable private key
-            this.keypair = Ed25519Keypair.fromSecretKey(new Uint8Array(Buffer.from(SUI_PRIVATE_KEY, "hex")));
+            this.keypair = Ed25519Keypair.fromSecretKey(SUI_PRIVATE_KEY);
         } else {
             // Generate new keypair for testing
             this.keypair = Ed25519Keypair.generate();
@@ -341,6 +341,13 @@ export class SuiHTLCBridge {
             throw error;
         }
     }
+
+    /**
+     * Get the Sui address for this keypair
+     */
+    getAddress(): string {
+        return this.keypair.getPublicKey().toSuiAddress();
+    }
 }
 
 // Example usage function
@@ -426,7 +433,7 @@ export async function exampleUsage() {
     }
 }
 
-// Run if this file is executed directly
-if (require.main === module) {
-    exampleUsage().catch(console.error);
-}
+// // Run if this file is executed directly
+// if (require.main === module) {
+//     exampleUsage().catch(console.error);
+// }
