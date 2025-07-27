@@ -8,6 +8,7 @@ import {Ed25519Keypair} from '@mysten/sui/keypairs/ed25519'
 import {randomBytes} from 'crypto'
 import {getEthereumConfig, getSuiConfig} from './contract-addresses'
 import {createDirect1inchClient, Direct1inchApiClient} from '../src/utils/direct-api-client'
+import {SuiHTLCBridge} from './sui-contract-bridge'
 import 'dotenv/config'
 
 // Mock backend server setup
@@ -242,102 +243,7 @@ class EthereumResolver {
     }
 }
 
-/**
- * Sui Resolver Contract Wrapper
- */
-class SuiResolver {
-    private client: SuiClient
 
-    private keypair: Ed25519Keypair
-
-    private address: string
-
-    private packageId: string
-
-    constructor(network: 'testnet' | 'mainnet' | 'devnet' = 'testnet', packageId?: string) {
-        this.client = new SuiClient({url: getFullnodeUrl(network)})
-        // For demo purposes, generate a keypair (in real app, use the provided private key)
-        this.keypair = new Ed25519Keypair()
-        this.address = this.keypair.getPublicKey().toSuiAddress()
-        this.packageId = packageId || '0x123' // Mock package ID
-    }
-
-    async deployDst(coinType: string, amount: bigint, hashLock: string, recipient: string): Promise<{ escrowId: string; txHash: string }> {
-        try {
-            console.log(`🔧 Deploying destination escrow on Sui with amount ${amount}`)
-            const tx = new Transaction()
-
-            // Mock escrow deployment
-            tx.moveCall({
-                target: `${this.packageId}::escrow::create_escrow`,
-                arguments: [tx.pure.string(coinType), tx.pure.u64(amount.toString()), tx.pure.string(hashLock), tx.pure.address(recipient)]
-            })
-
-            const result = await this.client.signAndExecuteTransaction({
-                signer: this.keypair,
-                transaction: tx
-            })
-
-            console.log(`✅ Sui escrow deployed: ${result.digest}`)
-
-            return {
-                txHash: result.digest,
-                escrowId: `0x${randomBytes(32).toString('hex')}`
-            }
-        } catch (error) {
-            console.error('Error in deployDst:', error)
-            throw error
-        }
-    }
-
-    async withdraw(escrowId: string, secret: string): Promise<{ txHash: string; receipt: any }> {
-        try {
-            console.log(`🔓 Withdrawing from Sui escrow ${escrowId} with secret`)
-            const tx = new Transaction()
-
-            tx.moveCall({
-                target: `${this.packageId}::escrow::withdraw`,
-                arguments: [tx.object(escrowId), tx.pure.string(secret)]
-            })
-
-            const result = await this.client.signAndExecuteTransaction({
-                signer: this.keypair,
-                transaction: tx
-            })
-
-            return {
-                txHash: result.digest,
-                receipt: result
-            }
-        } catch (error) {
-            console.error('Error in Sui withdraw:', error)
-            throw error
-        }
-    }
-
-    async getBalance(coinType: string): Promise<bigint> {
-        try {
-            const coins = await this.client.getCoins({
-                owner: this.address,
-                coinType
-            })
-
-            return coins.data.reduce((total, coin) => total + BigInt(coin.balance), 0n)
-        } catch (error) {
-            console.error('Error getting Sui balance:', error)
-
-            return 0n
-        }
-    }
-
-    getAddress(): string {
-        return this.address
-    }
-
-    getPackageId(): string {
-        return this.packageId
-    }
-}
 
 /**
  * Cross-Chain Order Manager
@@ -347,9 +253,9 @@ class CrossChainOrderManager {
 
     private ethereumResolver: EthereumResolver
 
-    private suiResolver: SuiResolver
+    private suiResolver: SuiHTLCBridge
 
-    constructor(apiClient: Direct1inchApiClient, ethereumResolver: EthereumResolver, suiResolver: SuiResolver) {
+    constructor(apiClient: Direct1inchApiClient, ethereumResolver: EthereumResolver, suiResolver: SuiHTLCBridge) {
         this.apiClient = apiClient
         this.ethereumResolver = ethereumResolver
         this.suiResolver = suiResolver
@@ -466,16 +372,33 @@ class CrossChainOrderManager {
             console.log('⚡ Executing Sui side of swap...')
 
             const hashLock = keccak256(toHex(secret))
-            const result = await this.suiResolver.deployDst(
-                TEST_CONFIG.sui.tokens.USDC.address,
-                amount,
-                hashLock,
-                recipient
-            )
+            
+            // Create HTLC lock object on Sui
+            const lockParams = {
+                hashLock: hashLock,
+                amount: amount.toString(),
+                recipient: recipient,
+                refund: this.suiResolver.getAddress(),
+                withdrawalMs: 600000, // 10 minutes
+                publicWithdrawalMs: 1200000, // 20 minutes
+                cancellationMs: 1800000, // 30 minutes
+                publicCancellationMs: 2400000, // 40 minutes
+                secretLength: secret.length,
+                safetyDeposit: '100000' // 0.1 SUI in MIST
+            }
 
-            console.log('✅ Sui escrow deployed:', result.txHash)
+            const result = await this.suiResolver.createLockObject(lockParams)
 
-            return result
+            if (!result.success || !result.lockId) {
+                throw new Error(`Failed to create Sui lock object: ${result.error}`)
+            }
+
+            console.log('✅ Sui HTLC lock created:', result.txDigest)
+
+            return {
+                escrowId: result.lockId!,
+                txHash: result.txDigest!
+            }
         } catch (error) {
             console.error('Error executing Sui swap:', error)
             throw error
@@ -489,9 +412,18 @@ class CrossChainOrderManager {
         try {
             console.log('🔓 Completing cross-chain swap with secret revelation...')
 
-            // Withdraw from Sui escrow first (user gets destination tokens)
-            const suiResult = await this.suiResolver.withdraw(suiEscrowId, secret)
-            console.log('✅ Sui withdrawal completed:', suiResult.txHash)
+            // Withdraw from Sui HTLC lock first (user gets destination tokens)
+            const withdrawParams = {
+                lockId: suiEscrowId,
+                secret: secret
+            }
+            const suiResult = await this.suiResolver.withdrawLock(withdrawParams)
+            
+            if (!suiResult.success) {
+                throw new Error(`Failed to withdraw from Sui lock: ${suiResult.error}`)
+            }
+            
+            console.log('✅ Sui withdrawal completed:', suiResult.txDigest)
 
             // Then resolver can withdraw from Ethereum escrow
             console.log('🔄 Resolver can now withdraw from Ethereum escrow using revealed secret')
@@ -510,7 +442,7 @@ class CrossChainOrderManager {
 describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
     let apiClient: Direct1inchApiClient
     let ethereumResolver: EthereumResolver
-    let suiResolver: SuiResolver
+    let suiResolver: SuiHTLCBridge
     let orderManager: CrossChainOrderManager
     let userAddress: `0x${string}`
     let suiAddress: string
@@ -543,7 +475,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         )
 
         // Initialize Sui resolver
-        suiResolver = new SuiResolver('testnet')
+        suiResolver = new SuiHTLCBridge()
 
         userAddress = ethereumResolver.getAddress()
         suiAddress = suiResolver.getAddress()

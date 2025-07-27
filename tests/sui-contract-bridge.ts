@@ -341,6 +341,13 @@ export class SuiHTLCBridge {
             throw error;
         }
     }
+
+    /**
+     * Get the Sui address for this keypair
+     */
+    getAddress(): string {
+        return this.keypair.getPublicKey().toSuiAddress();
+    }
 }
 
 // Example usage function
