@@ -1,0 +1,26 @@
+{
+  "name": "mock-1inch-backend",
+  "version": "1.0.0",
+  "description": "Mock backend server to intercept and log 1inch SDK API calls",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "mock",
+    "1inch",
+    "api",
+    "backend",
+    "express"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
