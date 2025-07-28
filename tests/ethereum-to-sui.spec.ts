@@ -107,7 +107,7 @@ class EthereumResolver {
                     takerTraits,
                     '0x' // args parameter
                 ],
-                value: order.escrowExtension?.srcSafetyDeposit || 0n
+                value: order.escrowExtension?.srcSafetyDeposit || 0
             })
 
             // Wait for transaction receipt
@@ -188,7 +188,7 @@ class EthereumResolver {
         } catch (error) {
             console.error('Error getting token balance:', error)
 
-            return 0n
+            return 0
         }
     }
 
@@ -322,30 +322,49 @@ class CrossChainOrderManager {
     async executeEthereumSwap(apiOrder: any, signature: string, amount: bigint, secret: string): Promise<{ txHash: string; escrowAddress: string }> {
         try {
             console.log('⚡ Executing Ethereum side of swap...')
+            console.log('🔍 Debug - secret:', secret)
+            console.log('🔍 Debug - apiOrder:', JSON.stringify(apiOrder, null, 2))
 
             // Create mock immutables and order for testing
-            const hashLock = keccak256(toHex(secret))
-            const mockImmutables = {
-                orderHash: hashLock,
-                hashLock: hashLock,
-                maker: this.ethereumResolver.getAddress(),
-                taker: this.ethereumResolver.getAddress(),
-                token: TEST_CONFIG.ethereum.tokens.USDC.address,
-                amount: amount,
-                safetyDeposit: 0n,
-                timelocks: 0n
-            }
-            const mockOrder = {
-                salt: 0n,
-                maker: this.ethereumResolver.getAddress(),
-                receiver: this.ethereumResolver.getAddress(),
-                makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
-                takerAsset: TEST_CONFIG.sui.tokens.USDC.address,
-                makingAmount: amount,
-                takingAmount: amount,
-                makerTraits: 0n
-            }
-            const mockTakerTraits = 0n
+            const hashLock = keccak256(toHex(secret)) // Returns exactly 32 bytes (0x + 64 hex chars)
+            console.log('🔍 Debug - hashLock:', hashLock)
+            
+            // Hash the apiOrder (which contains Sui data) into the orderHash
+            // If apiOrder is empty or undefined, use a default value
+            const orderData = apiOrder && Object.keys(apiOrder).length > 0 
+                ? JSON.stringify(apiOrder) 
+                : JSON.stringify({ orderId: 'mock-order-' + Date.now(), timestamp: Date.now() })
+            const orderHash = keccak256(toHex(orderData)) // Returns exactly 32 bytes
+            console.log('🔍 Debug - orderData:', orderData)
+            console.log('🔍 Debug - orderHash:', orderHash)
+            const makerAddress = this.ethereumResolver.getAddress() // User's EVM wallet
+            const takerAddress = this.ethereumResolver.getResolverAddress() // Resolver EVM address
+            
+            // Use proper 32-byte values for contract ABI
+            const salt = keccak256(toHex(`salt-${Date.now()}`)) // Generate proper 32-byte salt
+            
+            const mockImmutables = [
+                orderHash, // orderHash - contains hashed apiOrder with Sui data
+                hashLock, // hashlock - secret hash for HTLC
+                makerAddress, // maker - user's EVM wallet address (keep as address)
+                takerAddress, // taker - resolver EVM address (keep as address)
+                TEST_CONFIG.ethereum.tokens.USDC.address, // token - EVM USDC address (keep as address)
+                amount, // amount
+                parseUnits('0', 6), // safetyDeposit - proper uint256 value
+                BigInt(Math.floor(Date.now() / 1000) + 3600)  // timelocks - timestamp + 1 hour
+            ]
+            
+            const mockOrder = [
+                salt, // salt - proper 32-byte value
+                makerAddress, // maker - user's EVM wallet (keep as address)
+                takerAddress, // receiver - resolver EVM address (keep as address)
+                TEST_CONFIG.ethereum.tokens.USDC.address, // makerAsset - Ethereum USDC (keep as address)
+                TEST_CONFIG.ethereum.tokens.USDC.address, // takerAsset - Ethereum USDC (keep as address)
+                amount, // makingAmount
+                amount, // takingAmount
+                BigInt(1)  // makerTraits - proper uint256 value
+            ]
+            const mockTakerTraits = BigInt(1);
             
             const result = await this.ethereumResolver.deploySrc(
                 mockImmutables,
