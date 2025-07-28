@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeAll, afterAll} from '@jest/globals'
-import {createWalletClient, createPublicClient, http, parseUnits, keccak256, toHex, erc20Abi} from 'viem'
+import {createWalletClient, createPublicClient, http, parseUnits, keccak256, toHex, erc20Abi, parseSignature} from 'viem'
 import {privateKeyToAccount} from 'viem/accounts'
 import {sepolia} from 'viem/chains'
 import {SuiClient, getFullnodeUrl} from '@mysten/sui/client'
@@ -89,9 +89,30 @@ class EthereumResolver {
         amount: bigint
     ): Promise<{txHash: string; blockHash: string; escrowAddress: string}> {
         try {
-            // Parse signature components
-            const r = signature.slice(0, 66) as `0x${string}`
-            const vs = `0x${signature.slice(66)}` as `0x${string}`
+            // Parse signature using viem's parseSignature utility
+            const { r, s, yParity } = parseSignature(signature as `0x${string}`)
+            // For EIP-2098 compact signature format: vs = s + (yParity << 255)
+            const sBigInt = BigInt(s)
+            const yParityBit = BigInt(yParity) << 255n
+            const vsBigInt = sBigInt | yParityBit
+            const vs = `0x${vsBigInt.toString(16).padStart(64, '0')}` as `0x${string}`
+
+            console.log('🔍 Debug - deploySrc parameters:')
+            console.log('  signature:', signature)
+            console.log('  r:', r, 'type:', typeof r, 'length:', r.length)
+            console.log('  vs:', vs, 'type:', typeof vs, 'length:', vs.length)
+            console.log('  amount:', amount, 'type:', typeof amount)
+            console.log('  takerTraits:', takerTraits, 'type:', typeof takerTraits)
+            
+            console.log('🔍 Debug - immutables parameter:')
+            immutables.forEach((item, index) => {
+                console.log(`  immutables[${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
+            })
+            
+            console.log('🔍 Debug - order parameter:')
+            order.forEach((item, index) => {
+                console.log(`  order[${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
+            })
 
             // Call the resolver contract's deploySrc function
             const hash = await this.walletClient.writeContract({
@@ -105,7 +126,7 @@ class EthereumResolver {
                     vs,
                     amount,
                     takerTraits,
-                    '0x' // args parameter
+                    '0x' // args parameter (empty bytes)
                 ],
                 value: order.escrowExtension?.srcSafetyDeposit || 0
             })
@@ -323,11 +344,15 @@ class CrossChainOrderManager {
         try {
             console.log('⚡ Executing Ethereum side of swap...')
             console.log('🔍 Debug - secret:', secret)
+            console.log('🔍 Debug - secret type:', typeof secret)
+            console.log('🔍 Debug - secret length:', secret.length)
             console.log('🔍 Debug - apiOrder:', JSON.stringify(apiOrder, null, 2))
 
             // Create mock immutables and order for testing
             const hashLock = keccak256(toHex(secret)) // Returns exactly 32 bytes (0x + 64 hex chars)
             console.log('🔍 Debug - hashLock:', hashLock)
+            console.log('🔍 Debug - hashLock type:', typeof hashLock)
+            console.log('🔍 Debug - hashLock length:', hashLock.length)
             
             // Hash the apiOrder (which contains Sui data) into the orderHash
             // If apiOrder is empty or undefined, use a default value
@@ -337,11 +362,25 @@ class CrossChainOrderManager {
             const orderHash = keccak256(toHex(orderData)) // Returns exactly 32 bytes
             console.log('🔍 Debug - orderData:', orderData)
             console.log('🔍 Debug - orderHash:', orderHash)
+            console.log('🔍 Debug - orderHash type:', typeof orderHash)
+            console.log('🔍 Debug - orderHash length:', orderHash.length)
+            
             const makerAddress = this.ethereumResolver.getAddress() // User's EVM wallet
             const takerAddress = this.ethereumResolver.getResolverAddress() // Resolver EVM address
+            console.log('🔍 Debug - makerAddress:', makerAddress)
+            console.log('🔍 Debug - takerAddress:', takerAddress)
             
             // Use proper 32-byte values for contract ABI
             const salt = keccak256(toHex(`salt-${Date.now()}`)) // Generate proper 32-byte salt
+            console.log('🔍 Debug - salt:', salt)
+            console.log('🔍 Debug - salt type:', typeof salt)
+            console.log('🔍 Debug - salt length:', salt.length)
+            
+            const safetyDeposit = parseUnits('0', 6)
+            const timelocks = BigInt(Math.floor(Date.now() / 1000) + 3600)
+            console.log('🔍 Debug - amount:', amount)
+            console.log('🔍 Debug - safetyDeposit:', safetyDeposit)
+            console.log('🔍 Debug - timelocks:', timelocks)
             
             const mockImmutables = [
                 orderHash, // orderHash - contains hashed apiOrder with Sui data
@@ -350,9 +389,14 @@ class CrossChainOrderManager {
                 takerAddress, // taker - resolver EVM address (keep as address)
                 TEST_CONFIG.ethereum.tokens.USDC.address, // token - EVM USDC address (keep as address)
                 amount, // amount
-                parseUnits('0', 6), // safetyDeposit - proper uint256 value
-                BigInt(Math.floor(Date.now() / 1000) + 3600)  // timelocks - timestamp + 1 hour
+                safetyDeposit, // safetyDeposit - proper uint256 value
+                timelocks  // timelocks - timestamp + 1 hour
             ]
+            
+            console.log('🔍 Debug - mockImmutables array:')
+            mockImmutables.forEach((item, index) => {
+                console.log(`  [${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
+            })
             
             const mockOrder = [
                 salt, // salt - proper 32-byte value
@@ -364,7 +408,14 @@ class CrossChainOrderManager {
                 amount, // takingAmount
                 BigInt(1)  // makerTraits - proper uint256 value
             ]
-            const mockTakerTraits = BigInt(1);
+            
+            console.log('🔍 Debug - mockOrder array:')
+            mockOrder.forEach((item, index) => {
+                console.log(`  [${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
+            })
+            
+            const mockTakerTraits = BigInt(1)
+            console.log('🔍 Debug - mockTakerTraits:', mockTakerTraits)
             
             const result = await this.ethereumResolver.deploySrc(
                 mockImmutables,
@@ -434,7 +485,8 @@ class CrossChainOrderManager {
             // Withdraw from Sui HTLC lock first (user gets destination tokens)
             const withdrawParams = {
                 lockId: suiEscrowId,
-                secret: secret
+                secret: secret,
+                initVersion : 0n,
             }
             const suiResult = await this.suiResolver.withdrawLock(withdrawParams)
             
@@ -541,13 +593,35 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                     userAddress
                 )
 
-                // Step 3: Sign order (simplified - in real implementation, use proper EIP-712 signing)
+                // Step 3: Sign order using proper EIP-712 signing
                 console.log('\n✍️ Signing order...')
-                const mockSignature = '0x' + '0'.repeat(130) // Mock signature for testing
+                
+                // Create the order object that matches the EIP-712 structure
+                const salt = keccak256(toHex(`salt-${Date.now()}`))
+                const makerAddress = ethereumResolver.getAddress()
+                const takerAddress = ethereumResolver.getResolverAddress()
+                
+                const orderToSign = {
+                    salt: salt,
+                    maker: makerAddress,
+                    receiver: takerAddress,
+                    makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
+                    takerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
+                    makingAmount: makingAmount,
+                    takingAmount: makingAmount,
+                    makerTraits: BigInt(1)
+                }
+                
+                console.log('📝 Order to sign:', JSON.stringify(orderToSign, (key, value) => 
+                    typeof value === 'bigint' ? value.toString() : value, 2))
+                
+                const signature = await ethereumResolver.signOrder(TEST_CONFIG.ethereum.chainId, orderToSign)
+                console.log('✅ Generated signature:', signature)
+                console.log('📏 Signature length:', signature.length)
 
                 // Step 4: Execute Ethereum side
                 console.log('\n⚡ Executing Ethereum side...')
-                const ethResult = await orderManager.executeEthereumSwap(order, mockSignature, makingAmount, secret)
+                const ethResult = await orderManager.executeEthereumSwap(order, signature, makingAmount, secret)
 
                 // Step 5: Execute Sui side
                 console.log('\n⚡ Executing Sui side...')
@@ -764,114 +838,123 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         it('should simulate complete Fusion+ cross-chain swap flow (Ethereum Sepolia → Sui)', async () => {
             console.log('\n🌉 Testing complete Fusion+ cross-chain swap flow...')
 
-            try {
-                // Phase 1: ANNOUNCEMENT - Order Creation (using mock API)
-                console.log('\n🔄 Phase 1: ANNOUNCEMENT - Order Creation')
+            // Phase 1: ANNOUNCEMENT - Order Creation (using mock API)
+            console.log('\n🔄 Phase 1: ANNOUNCEMENT - Order Creation')
 
-                const secret = `0x${randomBytes(32).toString('hex')}`
-                const secretHash = keccak256(toHex(secret))
+            const secret = `0x${randomBytes(32).toString('hex')}`
+            const secretHash = keccak256(toHex(secret))
 
-                // Create order using mock API instead of SDK
-                const orderParams = {
-                    walletAddress: userAddress,
-                    hashLock: {
-                        hashLock: secretHash,
-                        srcChainId: TEST_CONFIG.ethereum.chainId,
-                        dstChainId: TEST_CONFIG.sui.chainId
-                    },
-                    secretHashes: [secretHash]
-                }
-
-                // Mock F+ Quoter API call
-                const quoteParams = {
+            // Create order using mock API instead of SDK
+            const orderParams = {
+                walletAddress: userAddress,
+                hashLock: {
+                    hashLock: secretHash,
                     srcChainId: TEST_CONFIG.ethereum.chainId,
-                    dstChainId: TEST_CONFIG.sui.chainId,
-                    srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
-                    dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
-                    amount: parseUnits('100', 6).toString(), // 100 USDC
-                    walletAddress: userAddress,
-                    enableEstimate: true
-                }
-
-                const quote = await apiClient.getQuote(quoteParams)
-                const order = await apiClient.createOrder(quote, orderParams)
-                console.log('✅ Quote obtained from F+ Quoter API:', quote.quoteId)
-                console.log('📋 Order created via API')
-
-                // Phase 2: DEPOSIT - Escrow Deployment
-                console.log('\n💰 Phase 2: DEPOSIT - Escrow Deployment')
-
-                // Mock signature for order (in real implementation, user signs with EIP-712)
-                const mockSignature = '0x' + '0'.repeat(130)
-
-                // Simulate resolver deploying source escrow on Ethereum using mock API
-                console.log('🔧 Resolver deploying source escrow on Ethereum Sepolia...')
-
-                const ethResult = await orderManager.executeEthereumSwap(
-                    order,
-                    mockSignature,
-                    parseUnits('100', 6),
-                    secret
-                )
-                console.log(`✅ Source escrow deployed at: ${ethResult.escrowAddress}`)
-
-                // TODO: Deploy destination escrow on Sui
-                console.log('🔧 TODO: Deploy destination escrow on Sui testnet')
-                console.log('   📦 Initialize Sui client with testnet RPC')
-                console.log('   📦 Deploy cross-chain escrow Move package')
-                console.log('   📦 Create escrow object with matching parameters:')
-                console.log(`      - hashLock: ${secretHash}`)
-                console.log(`      - timeLocks: withdrawal=${10}s, cancellation=${101}s`)
-                console.log(`      - amount: ${parseUnits('99', 6)} USDC`)
-                console.log(`      - recipient: user's Sui address`)
-
-                // Phase 3: WITHDRAWAL - Secret Revelation
-                console.log('\n🔓 Phase 3: WITHDRAWAL - Secret Revelation')
-
-                // Simulate time passing (finality lock)
-                console.log('⏰ Waiting for finality lock to pass...')
-
-                // User reveals secret after validating destination escrow
-                console.log('🔑 User revealing secret after validating Sui escrow...')
-
-                // Submit secret to F+ Relayer API
-                console.log('📤 Secret submitted to F+ Relayer API')
-
-                // Check for ready-to-accept secret fills
-                const readyFills = await apiClient.getReadyToAcceptSecretFills(order.orderHash || order.orderId)
-                console.log('✅ Ready fills checked:', readyFills)
-
-                // TODO: Execute withdrawal on Sui using revealed secret
-                console.log('🔧 TODO: Execute withdrawal on Sui using revealed secret')
-                console.log('   🔓 Use secret to unlock Sui escrow')
-                console.log('   💸 Transfer 99 USDC to user on Sui')
-                console.log('   📡 Emit withdrawal event for monitoring')
-
-                // Phase 4: RECOVERY - Resolver Claims
-                console.log('\n🔄 Phase 4: RECOVERY - Resolver Claims')
-
-                // Resolver withdraws from Ethereum escrow using revealed secret
-                console.log('🔧 Resolver withdrawing from Ethereum escrow using revealed secret...')
-                console.log('💰 Resolver receives 100 USDC on Ethereum')
-                console.log('✅ Cross-chain atomic swap completed successfully!')
-
-                // Verify final state
-                console.log('\n📊 Final State Verification:')
-                console.log('   ✅ User: -100 USDC (Ethereum) +99 USDC (Sui)')
-                console.log('   ✅ Resolver: +100 USDC (Ethereum) -99 USDC (Sui)')
-                console.log('   ✅ Secret revealed and used for both withdrawals')
-                console.log('   ✅ Atomic swap guarantee maintained')
-
-                // Test assertions
-                expect(order).toBeDefined()
-                expect(quote).toBeDefined()
-                expect(secretHash).toBeDefined()
-                expect(readyFills).toBeDefined()
-                expect(ethResult).toBeDefined()
-            } catch (error: any) {
-                console.error('❌ Cross-chain swap test failed:', error.message)
-                console.log('ℹ️ Error occurred in test environment - this is expected')
+                    dstChainId: TEST_CONFIG.sui.chainId
+                },
+                secretHashes: [secretHash]
             }
+
+            // Mock F+ Quoter API call
+            const quoteParams = {
+                srcChainId: TEST_CONFIG.ethereum.chainId,
+                dstChainId: TEST_CONFIG.sui.chainId,
+                srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
+                dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
+                amount: parseUnits('100', 6).toString(), // 100 USDC
+                walletAddress: userAddress,
+                enableEstimate: true
+            }
+
+            const quote = await apiClient.getQuote(quoteParams)
+            const order = await apiClient.createOrder(quote, orderParams)
+            console.log('✅ Quote obtained from F+ Quoter API:', quote.quoteId)
+            console.log('📋 Order created via API')
+
+            // Phase 2: DEPOSIT - Escrow Deployment
+            console.log('\n💰 Phase 2: DEPOSIT - Escrow Deployment')
+
+            // Generate proper EIP-712 signature instead of mock
+            console.log('🔑 Generating EIP-712 signature for order...')
+            const orderToSign = {
+                salt: keccak256(toHex(`salt-${Date.now()}`)),
+                maker: ethereumResolver.getAddress(),
+                receiver: ethereumResolver.getResolverAddress(),
+                makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
+                takerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
+                makingAmount: parseUnits('100', 6),
+                takingAmount: parseUnits('100', 6),
+                makerTraits: BigInt(1)
+            }
+            console.log('📝 Order to sign:', orderToSign)
+            
+            const signature = await ethereumResolver.signOrder(TEST_CONFIG.ethereum.chainId, orderToSign)
+            console.log('✅ Generated signature:', signature)
+
+            // Simulate resolver deploying source escrow on Ethereum using mock API
+            console.log('🔧 Resolver deploying source escrow on Ethereum Sepolia...')
+
+            const ethResult = await orderManager.executeEthereumSwap(
+                order,
+                signature,
+                parseUnits('100', 6),
+                secret
+            )
+            console.log(`✅ Source escrow deployed at: ${ethResult.escrowAddress}`)
+
+            // TODO: Deploy destination escrow on Sui
+            console.log('🔧 TODO: Deploy destination escrow on Sui testnet')
+            console.log('   📦 Initialize Sui client with testnet RPC')
+            console.log('   📦 Deploy cross-chain escrow Move package')
+            console.log('   📦 Create escrow object with matching parameters:')
+            console.log(`      - hashLock: ${secretHash}`)
+            console.log(`      - timeLocks: withdrawal=${10}s, cancellation=${101}s`)
+            console.log(`      - amount: ${parseUnits('99', 6)} USDC`)
+            console.log(`      - recipient: user's Sui address`)
+
+            // Phase 3: WITHDRAWAL - Secret Revelation
+            console.log('\n🔓 Phase 3: WITHDRAWAL - Secret Revelation')
+
+            // Simulate time passing (finality lock)
+            console.log('⏰ Waiting for finality lock to pass...')
+
+            // User reveals secret after validating destination escrow
+            console.log('🔑 User revealing secret after validating Sui escrow...')
+
+            // Submit secret to F+ Relayer API
+            console.log('📤 Secret submitted to F+ Relayer API')
+
+            // Check for ready-to-accept secret fills
+            const readyFills = await apiClient.getReadyToAcceptSecretFills(order.orderHash || order.orderId)
+            console.log('✅ Ready fills checked:', readyFills)
+
+            // TODO: Execute withdrawal on Sui using revealed secret
+            console.log('🔧 TODO: Execute withdrawal on Sui using revealed secret')
+            console.log('   🔓 Use secret to unlock Sui escrow')
+            console.log('   💸 Transfer 99 USDC to user on Sui')
+            console.log('   📡 Emit withdrawal event for monitoring')
+
+            // Phase 4: RECOVERY - Resolver Claims
+            console.log('\n🔄 Phase 4: RECOVERY - Resolver Claims')
+
+            // Resolver withdraws from Ethereum escrow using revealed secret
+            console.log('🔧 Resolver withdrawing from Ethereum escrow using revealed secret...')
+            console.log('💰 Resolver receives 100 USDC on Ethereum')
+            console.log('✅ Cross-chain atomic swap completed successfully!')
+
+            // Verify final state
+            console.log('\n📊 Final State Verification:')
+            console.log('   ✅ User: -100 USDC (Ethereum) +99 USDC (Sui)')
+            console.log('   ✅ Resolver: +100 USDC (Ethereum) -99 USDC (Sui)')
+            console.log('   ✅ Secret revealed and used for both withdrawals')
+            console.log('   ✅ Atomic swap guarantee maintained')
+
+            // Test assertions
+            expect(order).toBeDefined()
+            expect(quote).toBeDefined()
+            expect(secretHash).toBeDefined()
+            expect(readyFills).toBeDefined()
+            expect(ethResult).toBeDefined()
         }, 30000)
 
         it('should demonstrate Sui integration points', async () => {

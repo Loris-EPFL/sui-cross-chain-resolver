@@ -6,46 +6,45 @@ import { fromB64 } from '@mysten/sui/utils';
 
 // Environment variables for Sui configuration
 const SUI_PACKAGE_ID = process.env.SUI_PACKAGE_ID;
-const SUI_UPGRADE_CAP_ID = process.env.SUI_UPGRADE_CAP_ID;
 const SUI_NETWORK = process.env.SUI_NETWORK || 'testnet';
-const SUI_PRIVATE_KEY = process.env.SUI_PRIVATE_KEY;
+const SUI_PRIVATE_KEY_INIT = process.env.SUI_PRIVATE_KEY_INIT;
+const SUI_PRIVATE_KEY_THIRD_PARTY = process.env.SUI_PRIVATE_KEY_THIRD_PARTY;
 
 // Validate required environment variables
 if (!SUI_PACKAGE_ID) {
     throw new Error('SUI_PACKAGE_ID environment variable is required');
 }
 
-// if (!SUI_UPGRADE_CAP_ID) {
-//     throw new Error('SUI_UPGRADE_CAP_ID environment variable is required');
-// }
-
 // Types for the bridge system
 export interface HTLCLockParams {
-    hashLock: string;
-    amount: string;
-    recipient: string;
-    refund: string;
     withdrawalMs: number;
     publicWithdrawalMs: number;
     cancellationMs: number;
     publicCancellationMs: number;
+    hashLock: string;
+    refund: string;
+    recipient: string;
     secretLength: number;
+    amount: string;
     safetyDeposit: string;
 }
 
 export interface HTLCWithdrawParams {
     lockId: string;
     secret: string;
+    initVersion: bigint;
 }
 
 export interface HTLCCancelParams {
     lockId: string;
+    initVersion: bigint;
 }
 
 export interface HTLCResult {
     success: boolean;
     txDigest?: string;
     lockId?: string;
+    initVersion: bigint;
     error?: string;
     details?: any;
 }
@@ -68,9 +67,9 @@ export class SuiHTLCBridge {
         if (privateKey) {
             // Use provided private key
             this.keypair = Ed25519Keypair.fromSecretKey(privateKey);
-        } else if (SUI_PRIVATE_KEY && SUI_PRIVATE_KEY.trim() !== "" && SUI_PRIVATE_KEY !== "undefined") {
+        } else if (SUI_PRIVATE_KEY_INIT && SUI_PRIVATE_KEY_INIT.trim() !== "" && SUI_PRIVATE_KEY_INIT !== "undefined") {
             // Use environment variable private key
-            this.keypair = Ed25519Keypair.fromSecretKey(SUI_PRIVATE_KEY);
+            this.keypair = Ed25519Keypair.fromSecretKey(SUI_PRIVATE_KEY_INIT);
         } else {
             // Generate new keypair for testing
             this.keypair = Ed25519Keypair.generate();
@@ -79,7 +78,6 @@ export class SuiHTLCBridge {
         console.log('🔑 Using keypair address:', this.keypair.getPublicKey().toSuiAddress());
         console.log('🌐 Connected to Sui', SUI_NETWORK);
         console.log('📦 Package ID:', SUI_PACKAGE_ID);
-        console.log('🔧 Upgrade Cap ID:', SUI_UPGRADE_CAP_ID);
     }
 
     /**
@@ -100,10 +98,11 @@ export class SuiHTLCBridge {
             
             // Split coins for the lock amount and safety deposit
             const [lockCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.amount)]);
-            const [depositCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.safetyDeposit)]);
+            const [safetyDepositCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.safetyDeposit)]);
             
             // Convert hashLock from hex string to byte array
-            const hashLockBytes = new Uint8Array(Buffer.from(params.hashLock.slice(2), 'hex'));
+            const hashLockBytes = [...Buffer.from(params.hashLock.slice(2), 'hex')];
+            const hashVec = tx.pure.vector('u8', hashLockBytes);
             
             // Call the Move contract function with ALL required arguments
             tx.moveCall({
@@ -115,16 +114,19 @@ export class SuiHTLCBridge {
                     tx.pure.u64(params.publicWithdrawalMs),       // public_withdrawal_ms: u64
                     tx.pure.u64(params.cancellationMs),           // cancellation_ms: u64
                     tx.pure.u64(params.publicCancellationMs),     // public_cancellation_ms: u64
-                    tx.pure(hashLockBytes),                   // hashed: vector<u8>
-                    tx.pure.address(params.recipient),                // target: address
-                    tx.pure.address(params.refund),                   // refund: address
-                    lockCoin,                                 // amount: Coin<T>
-                    depositCoin,                              // deposit: Coin<T>
+                    hashVec,                        // hashed: vector<u8>
+                    tx.pure.address(params.refund),                 // refund: address
+                    tx.pure.address(params.recipient),              // target: address
+                    //tx.pure.address(params.initiator),              // initiator: address
                     tx.pure.u8(params.secretLength),             // secret_length: u8
+                    lockCoin,                                 // amount: Coin<T>
+                    safetyDepositCoin,                              // deposit: Coin<T>
+                    
                 ]
             });
 
             // Set gas budget
+            //TODO: make sure we remove it for final implementation
             tx.setGasBudget(10_000_000);
 
             console.log('📝 Transaction created, executing...');
@@ -148,19 +150,22 @@ export class SuiHTLCBridge {
             console.log('🔗 View on explorer:', `https://suiexplorer.com/txblock/${result.digest}?network=${SUI_NETWORK}`);
             
             // Extract created lock object ID from object changes
-            const createdObjects = result.objectChanges?.filter((change: any) => change.type === 'created');
-            let lockId: string | undefined;
             
-            if (createdObjects && createdObjects.length > 0) {
-                const lockObject = createdObjects[0] as any;
-                lockId = lockObject.objectId;
-                console.log('📦 Created lock object ID:', lockId);
-            }
+            console.log('result', result)
+            const lockObj = result.objectChanges?.find(
+                c => c.type === "created" &&
+                     c.objectType.startsWith(`${SUI_PACKAGE_ID}::oneinch_move::LockObject`)
+              );
+              if (!lockObj || lockObj.type !== "created") throw new Error("…");
+              const lockId = lockObj.objectId;                    // ✔ TypeScript sait
+              
+            const lockVersion = BigInt(lockObj.version);
             
             return {
                 success: true,
                 txDigest: result.digest,
                 lockId: lockId,
+                initVersion: lockVersion,
                 details: result
             };
             
@@ -169,7 +174,8 @@ export class SuiHTLCBridge {
             return {
                 success: false,
                 error: error.message,
-                details: error
+                details: error,
+                initVersion: BigInt(0)
             };
         }
     }
@@ -189,23 +195,33 @@ export class SuiHTLCBridge {
         
         try {
             const tx = new Transaction();
-            
+
             
             // Call the Move contract function
             tx.moveCall({
                 target: `${SUI_PACKAGE_ID}::oneinch_move::withdraw`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
-                  tx.object(params.lockId),                  // LockObject<T> (shared)
-                  tx.object('0x6'),                          // &Clock shared object
-                  tx.pure(new Uint8Array(Buffer.from(params.secret, 'utf8'))), // vector<u8>
-                ],
+                    tx.sharedObjectRef({
+                      objectId: params.lockId,
+                      initialSharedVersion: params.initVersion.toString(),
+                      mutable: true,
+                    }),
+                    tx.object('0x6'),
+                    tx.pure.vector('u8', [...Buffer.from(params.secret, 'utf8')]),  // ✔
+                  ],
               });
 
             console.log('📝 Withdrawal transaction created, executing...');
 
-            tx.setGasBudget(10_000_000);
-            
+            //TODO: make sure we remove it for final implementation
+            tx.setGasBudget(100_000_000);
+              // now withdraw safely
+              
+            //await this.client.waitForTransaction({ digest: createResult.txDigest });
+            //await this.client.cache.reset();   // clear the client‑side coin cache
+              
+                        
             const result = await this.client.signAndExecuteTransaction({
                 transaction: tx,
                 signer: this.keypair,
@@ -224,7 +240,8 @@ export class SuiHTLCBridge {
             return {
                 success: true,
                 txDigest: result.digest,
-                details: result
+                details: result,
+                initVersion: params.initVersion
             };
             
         } catch (error: any) {
@@ -232,7 +249,8 @@ export class SuiHTLCBridge {
             return {
                 success: false,
                 error: error.message,
-                details: error
+                details: error,
+                initVersion: params.initVersion
             };
         }
     }
@@ -257,13 +275,18 @@ export class SuiHTLCBridge {
                 target: `${SUI_PACKAGE_ID}::oneinch_move::cancel`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
-                  tx.object(params.lockId),
+                    tx.sharedObjectRef({
+                        objectId: params.lockId,
+                        initialSharedVersion: params.initVersion.toString(),
+                        mutable: true,
+                      }),
                   tx.object('0x6'),
                 ],
               });
 
             console.log('📝 Cancellation transaction created, executing...');
 
+            //TODO: make sure we remove it for final implementation
             tx.setGasBudget(10_000_000);
             
             const result = await this.client.signAndExecuteTransaction({
@@ -284,7 +307,8 @@ export class SuiHTLCBridge {
             return {
                 success: true,
                 txDigest: result.digest,
-                details: result
+                details: result,
+                initVersion: params.initVersion
             };
             
         } catch (error: any) {
@@ -292,7 +316,8 @@ export class SuiHTLCBridge {
             return {
                 success: false,
                 error: error.message,
-                details: error
+                details: error,
+                initVersion: params.initVersion
             };
         }
     }
@@ -348,18 +373,22 @@ export class SuiHTLCBridge {
     getAddress(): string {
         return this.keypair.getPublicKey().toSuiAddress();
     }
+
+    public getClient() {
+        return this.client;
+    }
 }
 
 // Example usage function
 export async function exampleUsage() {
     console.log('🚀 Starting Sui HTLC Bridge Example...');
     console.log('�� Package ID:', SUI_PACKAGE_ID);
-    console.log('🔧 Upgrade Cap ID:', SUI_UPGRADE_CAP_ID);
     console.log('🌐 Network:', SUI_NETWORK);
     console.log('');
 
     // Initialize the bridge
-    const bridge = new SuiHTLCBridge();
+    const bridge = new SuiHTLCBridge(SUI_PRIVATE_KEY_INIT);
+    const bridgeThirdParty = new SuiHTLCBridge(SUI_PRIVATE_KEY_THIRD_PARTY);
 
     try {
         // Step 1: Check balance
@@ -375,20 +404,24 @@ export async function exampleUsage() {
         // Step 3: Create HTLC lock object
         console.log('=== Step 3: Create HTLC Lock Object ===');
         const createParams: HTLCLockParams = {
-            hashLock: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-            amount: '1000000', // 1 SUI in MIST
+            hashLock: '0x33d8b47bfa962a165d3d0273ffd199d7d3fae4a908f525edb4e8a6b024b89c2d',
+            //hashLock: '0x33d8b47bfa962a165d3d0273ffd199d7d3fae4a908f527edb4e8a6b024b89c2d',   //Pour fail secretpreimage
+            amount: '5000', // 0.005 SUI in MIST
             recipient: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
             refund: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
-            withdrawalMs: 600000, // 1 minute
-            publicWithdrawalMs: 120000, // 2 minutes
-            cancellationMs: 180000, // 3 minutes
-            publicCancellationMs: 240000, // 4 minutes
+            withdrawalMs: 10000, // 10 secondes
+            publicWithdrawalMs: 20000, // 20 secondes
+            cancellationMs: 30000, // 30 secondes
+            publicCancellationMs: 40000, // 40 secondes
             secretLength: 16,
-            safetyDeposit: '100000' // 0.1 SUI in MIST
+            safetyDeposit: '1000' // 0.001 SUI in MIST
         };
 
+        console.log('timestamp_create', new Date().getTime());
         const createResult = await bridge.createLockObject(createParams);
-        
+
+        console.log('createResult', createResult)
+
         if (createResult.success && createResult.lockId) {
             console.log('✅ Lock created successfully!');
             console.log('📦 Lock ID:', createResult.lockId);
@@ -401,26 +434,147 @@ export async function exampleUsage() {
             console.log('');
 
             // Uncomment to test withdrawal
-            // console.log('=== Step 5: Withdraw Lock Object ===');
-            // const withdrawParams: HTLCWithdrawParams = {
-            //     lockId: createResult.lockId,
-            //     secret: 'my-secret-key-123'
-            // };
-            // const withdrawResult = await bridge.withdrawLock(withdrawParams);
-            // console.log('Withdraw result:', withdrawResult);
-            // console.log('');
+            console.log('=== Step 5: Withdraw Lock Object ===');
 
-            // Uncomment to test cancellation
+            const withdrawParams: HTLCWithdrawParams = {
+                 lockId: createResult.lockId,  // This should be the actual object ID
+                 secret: 'my-secret-key-12',
+                 initVersion: createResult.initVersion
+                 //secret: "my-secret-key-123"   //Pour tester wrong secret length, rend code 2 sur suiscan
+             };
+
+            /*
+            // DEBUG ALL
+            console.log('withdrawParams', withdrawParams)
+            console.log(' Lock ID being used:', createResult.lockId);
+            console.log('🔍 Lock ID type:', typeof createResult.lockId);
+
+
+            console.log('🔍 Full Debug:');
+            console.log('Hash Lock:', createParams.hashLock);
+            console.log('Secret:', withdrawParams.secret);
+            console.log('Lock ID:', createResult.lockId);
+            console.log('Create TX:', createResult.txDigest);
+            */
+
+            /*
+            // Check lock object
+            console.log('🔍 Checking lock object...');
+            try {
+                const lockObject = await bridge.getClient().getObject({  // ✅ Use getClient()
+                    id: createResult.lockId,
+                    options: { showContent: true, showDisplay: true }
+                });
+                console.log(' Lock object exists:', !!lockObject.data);
+                console.log('🔍 Lock object content:', lockObject.data?.content);
+                console.log('🔍 Lock object display:', lockObject.data?.display);
+            } catch (error) {
+                console.error('❌ Error getting lock object:', error);
+            }
+            */
+
+            /*
+            // Check gas coins
+            console.log('⛽ Checking gas coins...');
+            const gasObjects = await bridge.getClient().getOwnedObjects({
+                owner: bridge.getAddress(),
+                options: {
+                    showContent: true,
+                    showDisplay: true
+                }
+            });
+            console.log('💰 Gas objects count:', gasObjects.data?.length || 0);
+            console.log(' Gas objects:', gasObjects.data?.map(obj => ({
+                id: obj.data?.objectId,
+                type: obj.data?.type
+            })));
+            */
+
+            /*
+            //GAS DEBUG
+            console.log('🔍 Gas Debug:');
+            const balance = await bridge.getBalance();
+            console.log('Balance:', balance.totalBalance);
+            console.log('Gas budget needed:', 100_000_000);
+            console.log('Enough gas?', parseInt(balance.totalBalance) >= 100_000_000);*/
+
+            // Wait for create transaction to be confirmed
+            /*console.log('⏳ Waiting for create transaction to be confirmed...');
+            if (createResult.txDigest) {
+                await bridge.getClient().waitForTransaction({ 
+                    digest: createResult.txDigest,
+                    timeout: 30000 
+                });
+                console.log('✅ Create transaction confirmed!');
+            } else {
+                console.log('❌ No transaction digest available');
+            }*/
+
+            // Uncomment to test withdrawal by resolver
+            /*
+            console.log('timestamp_withdraw_pre_wait', new Date().getTime());
+            console.log('⏳ Waiting 10 seconds before withdrawal...');
+            await new Promise(resolve => setTimeout(resolve, 10000));   //commenter pour fail WithdrawNotAvailable (code5 suiscan)
+            console.log('timestamp_withdraw_post_wait', new Date().getTime());
+             const withdrawResult = await bridge.withdrawLock(withdrawParams);
+             console.log('Withdraw result:', withdrawResult);
+             console.log(''); 
+             */
+
+             // Uncomment to test withdrawal by public
+            /*
+            console.log('timestamp_withdraw_pre_wait', new Date().getTime());
+            console.log('⏳ Waiting 20 seconds before withdrawal...');
+            //console.log('⏳ Waiting 10 seconds before withdrawal... Expect fail');
+            await new Promise(resolve => setTimeout(resolve, 20000));   //mettre a 10000 pour fail WithdrawNotAllowed (code6 suiscan)
+            console.log('timestamp_withdraw_post_wait', new Date().getTime());
+            const withdrawResultThirdParty = await bridgeThirdParty.withdrawLock(withdrawParams);
+            //const withdrawResultInit = await bridge.withdrawLock(withdrawParams);  //Test resolver during public time
+            //console.log('Withdraw result:', withdrawResultInit);  //Res resolver during public time
+            console.log('Withdraw result:', withdrawResultThirdParty);
+            console.log(''); 
+            */
+
+            // Uncomment to test cancellation by resolver
+            /*
             console.log('=== Step 6: Cancel Lock Object ===');
             const cancelParams: HTLCCancelParams = {
-                lockId: createResult.lockId
+                lockId: createResult.lockId,
+                initVersion: createResult.initVersion
             };
+
+            console.log('timestamp_cancel_pre_wait', new Date().getTime());
+            console.log('⏳ Waiting 30 seconds before cancel...');
+            await new Promise(resolve => setTimeout(resolve, 30000));   //commenter pour fail CancelNotAvailable (code3 suiscan)
+            console.log('timestamp_cancel_post_wait', new Date().getTime());
+
             const cancelResult = await bridge.cancelLock(cancelParams);
             console.log('Cancel result:', cancelResult);
             console.log('');
+            */
+
+            // Uncomment to test cancellation by public
+            /*
+            console.log('=== Step 6: Cancel Lock Object ===');
+            const cancelParams: HTLCCancelParams = {
+                lockId: createResult.lockId,
+                initVersion: createResult.initVersion
+            };
+
+            console.log('timestamp_cancel_pre_wait', new Date().getTime());
+            console.log('⏳ Waiting 40 seconds before cancel...');
+            await new Promise(resolve => setTimeout(resolve, 30000));   //commenter a <40000 pour fail CancelNotllowed (code4 suiscan)
+            console.log('timestamp_cancel_post_wait', new Date().getTime());
+            const cancelResultThirdParty = await bridgeThirdParty.cancelLock(cancelParams);
+            //const cancelResult = await bridge.cancelLock(cancelParams);  //Cancel by resolver during public time
+            console.log('Cancel result_thirdparty:', cancelResultThirdParty);
+            //console.log('Cancel result:', cancelResult);
+            console.log('');
+            */
+
         } else {
             console.error('❌ Failed to create lock:', createResult.error);
-        }
+    }
 
     } catch (error) {
         console.error('❌ Example execution error:', error);
@@ -433,7 +587,7 @@ export async function exampleUsage() {
     }
 }
 
-// // Run if this file is executed directly
+// // // Run if this file is executed directly
 // if (require.main === module) {
-//     exampleUsage().catch(console.error);
+//      exampleUsage().catch(console.error);
 // }
