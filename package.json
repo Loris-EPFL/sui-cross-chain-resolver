@@ -4,7 +4,8 @@
   "description": "Example of 1inch cross chain resolver",
   "scripts": {
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
-    "lint": "eslint  \"tests/**/*.ts\""
+    "lint": "eslint  \"tests/**/*.ts\"",
+    "ts:run": "tsx"
   },
   "devDependencies": {
     "@1inch/eslint-config": "^v3.0.7",
@@ -49,5 +50,20 @@
     "ethers": "6.13.2",
     "prool": "0.0.24",
     "viem": "^2.33.1"
-  }
+  },
+  "main": ".prettierrc.js",
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Loris-EPFL/sui-cross-chain-resolver.git"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Loris-EPFL/sui-cross-chain-resolver/issues"
+  },
+  "homepage": "https://github.com/Loris-EPFL/sui-cross-chain-resolver#readme"
 }
