@@ -510,16 +510,16 @@ export async function exampleUsage() {
                 console.log('❌ No transaction digest available');
             }*/
 
-            // Uncomment to test withdrawal by resolver
+            //Uncomment to test withdrawal by resolver
             /*
             console.log('timestamp_withdraw_pre_wait', new Date().getTime());
             console.log('⏳ Waiting 10 seconds before withdrawal...');
             await new Promise(resolve => setTimeout(resolve, 10000));   //commenter pour fail WithdrawNotAvailable (code5 suiscan)
             console.log('timestamp_withdraw_post_wait', new Date().getTime());
-             const withdrawResult = await bridge.withdrawLock(withdrawParams);
-             console.log('Withdraw result:', withdrawResult);
-             console.log(''); 
-             */
+            const withdrawResult = await bridge.withdrawLock(withdrawParams);
+            console.log('Withdraw result:', withdrawResult);
+            console.log(''); 
+            */
 
              // Uncomment to test withdrawal by public
             /*

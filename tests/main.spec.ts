@@ -1,10 +1,34 @@
 import 'dotenv/config'
 import {expect, jest, describe, it, beforeAll, afterAll} from '@jest/globals'
 
-import {createServer, CreateServerReturnType} from 'prool'
-import {anvil} from 'prool/instances'
+// Mock prool to avoid ES modules issues
+jest.mock('prool', () => ({
+    createServer: jest.fn((config: any) => ({
+        start: jest.fn(),
+        stop: jest.fn(),
+        address: jest.fn(() => ({ address: '127.0.0.1', port: 8545 }))
+    })),
+    instances: {
+        anvil: jest.fn((config: any) => ({ forkUrl: config.forkUrl, chainId: config.chainId }))
+    }
+}))
 
-import Sdk from '@1inch/cross-chain-sdk'
+// Type definitions for mocked prool
+type CreateServerReturnType = {
+    start: () => Promise<void>
+    stop: () => Promise<void>
+    address: () => { address: string; port: number } | null
+}
+
+const createServer = jest.fn((config: any) => ({
+    start: jest.fn(),
+    stop: jest.fn(),
+    address: jest.fn(() => ({ address: '127.0.0.1', port: 8545 }))
+})) as jest.MockedFunction<(config: any) => CreateServerReturnType>
+
+const anvil = jest.fn((config: any) => ({ forkUrl: config.forkUrl, chainId: config.chainId })) as jest.MockedFunction<(config: any) => any>
+
+import Sdk, { Address } from '@1inch/cross-chain-sdk'
 import {
     computeAddress,
     ContractFactory,
@@ -21,10 +45,8 @@ import {ChainConfig, config} from './config'
 import {Wallet} from './wallet'
 import {Resolver} from './resolver'
 import {EscrowFactory} from './escrow-factory'
-import factoryContract from '../dist/contracts/TestEscrowFactory.sol/TestEscrowFactory.json'
-import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
-
-const {Address} = Sdk
+import factoryContract from '../contracts/out/TestEscrowFactory.sol/TestEscrowFactory.json'
+import resolverContract from '../contracts/out/Resolver.sol/Resolver.json'
 
 
 
@@ -118,9 +140,13 @@ describe('Resolving example', () => {
     }
 
     afterAll(async () => {
-        src.provider.destroy()
-        dst.provider.destroy()
-        await Promise.all([src.node?.stop(), dst.node?.stop()])
+        if (src?.provider?.destroy) {
+            src.provider.destroy()
+        }
+        if (dst?.provider?.destroy) {
+            dst.provider.destroy()
+        }
+        await Promise.all([src?.node?.stop(), dst?.node?.stop()].filter(Boolean))
     })
 
     // eslint-disable-next-line max-lines-per-function
@@ -154,8 +180,8 @@ describe('Resolving example', () => {
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
-                    srcChainId,
-                    dstChainId,
+                    srcChainId : Sdk.SupportedChains[0],
+                    dstChainId : Sdk.SupportedChains[4],
                     srcSafetyDeposit: parseEther('0.001'),
                     dstSafetyDeposit: parseEther('0.001')
                 },
@@ -293,8 +319,8 @@ describe('Resolving example', () => {
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
-                    srcChainId,
-                    dstChainId,
+                    srcChainId : Sdk.SupportedChains[0],
+                    dstChainId : Sdk.SupportedChains[4],
                     srcSafetyDeposit: parseEther('0.001'),
                     dstSafetyDeposit: parseEther('0.001')
                 },
@@ -445,8 +471,8 @@ describe('Resolving example', () => {
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
-                    srcChainId,
-                    dstChainId,
+                    srcChainId: Sdk.SupportedChains[0],
+                    dstChainId: Sdk.SupportedChains[4],
                     srcSafetyDeposit: parseEther('0.001'),
                     dstSafetyDeposit: parseEther('0.001')
                 },
@@ -596,8 +622,8 @@ describe('Resolving example', () => {
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
-                    srcChainId,
-                    dstChainId,
+                    srcChainId: Sdk.SupportedChains[0],
+                    dstChainId: Sdk.SupportedChains[4],
                     srcSafetyDeposit: parseEther('0.001'),
                     dstSafetyDeposit: parseEther('0.001')
                 },

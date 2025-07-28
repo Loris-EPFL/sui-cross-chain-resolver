@@ -13,9 +13,13 @@ export default {
     transform: {
         '^.+\\.(t|j)s$': ['@swc/jest']
     },
-    extensionsToTreatAsEsm: ['.ts', '.tsx'],
     transformIgnorePatterns: [
-        // "/node_modules/",
-        // "\\.pnp\\.[^\\/]+$",
-    ]
+        "node_modules/(?!(prool|@pimlico)/)"
+    ],
+    preset: 'ts-jest',
+    globals: {
+        'ts-jest': {
+            useESM: false
+        }
+    }
 }
