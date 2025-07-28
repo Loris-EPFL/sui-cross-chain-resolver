@@ -64,7 +64,7 @@ contract Resolver is Ownable {
         // _ARGS_HAS_TARGET = 1 << 251
         takerTraits = TakerTraits.wrap(TakerTraits.unwrap(takerTraits) | uint256(1 << 251));
         bytes memory argsMem = abi.encodePacked(computed, args);
-        _LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
+        //_LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
     }
 
     /**

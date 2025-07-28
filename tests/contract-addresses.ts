@@ -11,19 +11,32 @@ export const CONTRACT_ADDRESSES = {
             process.env.SEPOLIA_RPC_URL ||
             'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e',
 
-        // Deployed contract addresses from terminal output
-        resolver: '0x0db55eb77f8c393147F7675b67cB9536c5eAbB32' as `0x${string}`,
-        escrowFactory: '0xADEC8911058DbDcC8Cd3Ab80Fa17Daf3dFA7E456' as `0x${string}`,
-        escrowSrcImpl: '0x7424226D43B88191717345a85219ABA7191076AB' as `0x${string}`,
-        escrowDstImpl: '0xeb7f918a2712349b8b6973720aa04f40c05D3da0' as `0x${string}`,
+        // Deployed contract addresses from latest deployment
+        resolver: '0x5c6B9B8E34d8891b27b1541B5dEdF954414AE1b5' as `0x${string}`,
+        escrowFactory: '0x97f343BcaFc099000ecf22d295B3962d51b39a0B' as `0x${string}`,
+        escrowSrcImpl: '0x77b7de389F29D041536052Cb9F7796fCA75F4173' as `0x${string}`,
+        escrowDstImpl: '0x3F57D804341Ac50eFA5c2793cC9b1108A07B0471' as `0x${string}`,
 
-        // Token addresses
+        // Mock token addresses
         tokens: {
             USDC: {
-                address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' as `0x${string}`,
+                address: '0x8fd3F00bc09f8F7680b099FD9a9EdA2Fe4714e1C' as `0x${string}`,
                 decimals: 6
+            },
+            WETH: {
+                address: '0xE612eC9927FcD1F8931fc1ffA0465bD08880659C' as `0x${string}`,
+                decimals: 18
             }
-        }
+        },
+
+        // Mock Limit Order Protocol
+        limitOrderProtocol: '0x9182db0E206dfb5D7C7BDAe0df79Cc3D91C993ff' as `0x${string}`,
+
+        // Fee Bank
+        feeBank: '0x3a2B5099f962A56EEA9890bc57CB6643441Ba4ac' as `0x${string}`,
+
+        // Deployer address
+        deployer: '0x897Ec8F290331cfb0916F57b064e0A78Eab0e4A5' as `0x${string}`
     },
 
     // Ethereum mainnet (for reference)

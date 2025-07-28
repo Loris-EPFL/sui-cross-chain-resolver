@@ -133,7 +133,7 @@ contract DeployScript is Script {
         console.log("Minted 1,000,000 USDC to deployer");
         
         // Deposit some ETH to get WETH for testing
-        mockWETH.deposit{value: 10 ether}();
+        mockWETH.deposit{value: 0.001 ether}();
         console.log("Deposited 10 ETH to get WETH for deployer");
         
         vm.stopBroadcast();

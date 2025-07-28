@@ -234,7 +234,7 @@ class EthereumResolver {
                     vs,
                     amount,
                     takerTraits,
-                    '0x' // args parameter (empty bytes)
+                    '0x0000000000000000000000000000000000000000' // Target address (20 bytes of zeros for now)
                 ],
                 value: safetyDeposit // Also send safety deposit with the transaction
             })
@@ -321,6 +321,61 @@ class EthereumResolver {
             return hash
         } catch (error) {
             console.error('Error in approveToken:', error)
+            throw error
+        }
+    }
+
+    /**
+     * Generate EIP-712 signature for order
+     */
+    async signOrder(order: any): Promise<string> {
+        try {
+            // EIP-712 domain for the Limit Order Protocol contract
+            const domain = {
+                name: '1inch Limit Order Protocol',
+                version: '4',
+                chainId: TEST_CONFIG.ethereum.chainId,
+                verifyingContract: (TEST_CONFIG.ethereum as any).limitOrderProtocol as `0x${string}`
+            }
+
+            // EIP-712 types for the order - using address type as per LOP contract
+            const types = {
+                Order: [
+                    { name: 'salt', type: 'uint256' },
+                    { name: 'maker', type: 'address' },
+                    { name: 'receiver', type: 'address' },
+                    { name: 'makerAsset', type: 'address' },
+                    { name: 'takerAsset', type: 'address' },
+                    { name: 'makingAmount', type: 'uint256' },
+                    { name: 'takingAmount', type: 'uint256' },
+                    { name: 'makerTraits', type: 'uint256' }
+                ]
+            }
+
+            // Use address type for signing as per LOP contract's Order structure
+            const orderForSigning = {
+                salt: order.salt,
+                maker: order.maker as `0x${string}`,
+                receiver: order.receiver as `0x${string}`,
+                makerAsset: order.makerAsset as `0x${string}`,
+                takerAsset: order.takerAsset as `0x${string}`,
+                makingAmount: order.makingAmount,
+                takingAmount: order.takingAmount,
+                makerTraits: order.makerTraits
+            }
+
+            // Sign the order
+            const signature = await this.walletClient.signTypedData({
+                domain,
+                types,
+                primaryType: 'Order',
+                message: orderForSigning
+            })
+
+            console.log('🔐 Generated EIP-712 signature for LOP:', signature)
+            return signature
+        } catch (error) {
+            console.error('❌ Error signing order:', error)
             throw error
         }
     }
@@ -506,7 +561,7 @@ class CrossChainOrderManager {
             const mockOrder = [
                 salt, // salt from orderToSign
                 makerAddressUint, // maker - user's EVM wallet as uint256
-                takerAddressUint, // receiver - resolver EVM address as uint256
+                hexAddressToUint256(orderToSign.receiver), // receiver - should be user's address
                 hexAddressToUint256(orderToSign.makerAsset), // makerAsset from orderToSign
                 hexAddressToUint256(orderToSign.takerAsset), // takerAsset from orderToSign
                 orderToSign.makingAmount, // makingAmount from orderToSign
@@ -533,6 +588,34 @@ class CrossChainOrderManager {
             
             // Note: Backend handles order approval and signing
             console.log('🔐 Backend handles order approval and signing')
+            
+            // Ensure maker has enough tokens and has approved the LOP contract
+            console.log('💰 Ensuring maker has sufficient tokens and approval...')
+            const makerAddressForApproval = this.ethereumResolver.getAddress()
+            const lopAddress = (TEST_CONFIG.ethereum as any).limitOrderProtocol
+            
+            // Check maker's USDC balance
+            const makerBalance = await this.ethereumResolver.getTokenBalance(
+                TEST_CONFIG.ethereum.tokens.USDC.address,
+                makerAddressForApproval
+            )
+            console.log('🔍 Maker USDC balance:', makerBalance)
+            
+            // If maker doesn't have enough tokens, mint some (for testing)
+            if (makerBalance < amount) {
+                console.log('🏭 Minting USDC tokens to maker for testing...')
+                // This would typically be done by the token contract owner
+                // For now, we'll assume the maker has enough tokens
+                console.log('⚠️ Maker needs more USDC tokens. In production, this would be handled by the user.')
+            }
+            
+            // Approve LOP contract to spend maker's tokens
+            console.log('✅ Approving LOP contract to spend maker\'s tokens...')
+            await this.ethereumResolver.approveToken(
+                TEST_CONFIG.ethereum.tokens.USDC.address,
+                lopAddress,
+                amount
+            )
             
             // Execute actual on-chain contract call
             console.log('🔄 Executing actual on-chain escrow deployment...')
@@ -744,20 +827,19 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                     takerAsset: TEST_CONFIG.ethereum.tokens.USDC.address, // Use USDC as taker asset
                     makingAmount: makingAmount,
                     takingAmount: parseUnits('0.0001', 18),
-                    makerTraits: BigInt(1)
+                    makerTraits: BigInt(0) // Public order, no special flags
                 }
                 
                 console.log('🔍 Debug - orderToSign:', orderToSign)
                 
-                // Backend handles order signing - using mock signature for testing
-                console.log('🔍 Debug - Backend handles order signing')
+                // Generate real EIP-712 signature for the order
+                console.log('🔍 Debug - Generating real EIP-712 signature')
                 
-                // Create mock signature for testing
-                const mockSignature = `0x${randomBytes(32).toString('hex')}${randomBytes(32).toString('hex')}00`
-                console.log('🔍 Debug - mockSignature:', mockSignature)
+                const signature = await ethereumResolver.signOrder(orderToSign)
+                console.log('🔍 Debug - signature:', signature)
                 
-                // Parse the mock signature
-                const { r, s, yParity } = parseSignature(mockSignature as `0x${string}`)
+                // Parse the signature for debugging
+                const { r, s, yParity } = parseSignature(signature as `0x${string}`)
                 const sBigInt = BigInt(s)
                 const yParityBit = BigInt(yParity) << 255n
                 const vsBigInt = sBigInt | yParityBit
@@ -765,8 +847,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
                 console.log('📝 Order to sign:', JSON.stringify(orderToSign, (key, value) => 
                     typeof value === 'bigint' ? value.toString() : value, 2))
-                
-                const signature = mockSignature
                 console.log('✅ Generated signature:', signature)
                 console.log('📏 Signature length:', signature.length)
 
@@ -1030,19 +1110,18 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             const orderToSign = {
                 salt: keccak256(toHex(`salt-${Date.now()}`)),
                 maker: ethereumResolver.getAddress(),
-                receiver: ethereumResolver.getResolverAddress(),
+                receiver: userAddress, // User should receive the tokens
                 makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
                 takerAsset: TEST_CONFIG.ethereum.tokens.USDC.address, // Use USDC as taker asset
                 makingAmount: parseUnits('100', 6),
                 takingAmount: parseUnits('100', 6),
-                makerTraits: BigInt(1)
+                makerTraits: BigInt(0) // Public order, no special flags
             }
             console.log('📝 Order to sign:', orderToSign)
             
-            // Backend handles order signing - using mock signature for testing
-            const mockSignature = `0x${randomBytes(32).toString('hex')}${randomBytes(32).toString('hex')}00`
-            const signature = mockSignature
-            console.log('✅ Generated mock signature:', signature)
+            // Generate real EIP-712 signature for the order
+            const signature = await ethereumResolver.signOrder(orderToSign)
+            console.log('✅ Generated real signature:', signature)
 
             // Simulate resolver deploying source escrow on Ethereum using mock API
             console.log('🔧 Resolver deploying source escrow on Ethereum Sepolia...')
