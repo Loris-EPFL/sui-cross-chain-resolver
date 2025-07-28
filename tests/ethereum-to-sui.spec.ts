@@ -378,10 +378,42 @@ class CrossChainOrderManager {
             console.log('🔍 Debug - salt length:', salt.length)
             
             const safetyDeposit = parseUnits('0', 6)
-            const timelocks = BigInt(Math.floor(Date.now() / 1000) + 3600)
+            
+            // Create timelocks with small intervals for testing based on TimelocksLib.sol stages
+            const currentTime = BigInt(Math.floor(Date.now() / 1000))
+            const timelocks = {
+                srcWithdrawal: currentTime + 60n,        // 1 minute from now
+                srcPublicWithdrawal: currentTime + 120n,  // 2 minutes from now
+                srcCancellation: currentTime + 180n,      // 3 minutes from now
+                srcPublicCancellation: currentTime + 240n, // 4 minutes from now
+                dstWithdrawal: currentTime + 300n,        // 5 minutes from now
+                dstPublicWithdrawal: currentTime + 360n,  // 6 minutes from now
+                dstCancellation: currentTime + 420n       // 7 minutes from now
+            }
+            
+            // Pack timelocks into a single uint256 as expected by the contract
+            // Based on TimelocksSettersLib.sol structure
+            // Each stage uses 32 bits, deployedAt uses the upper 32 bits
+            const packedTimelocks = (timelocks.srcWithdrawal << 0n) |                    // Stage.SrcWithdrawal (0) * 32
+                                   (timelocks.srcPublicWithdrawal << 32n) |              // Stage.SrcPublicWithdrawal (1) * 32
+                                   (timelocks.srcCancellation << 64n) |                  // Stage.SrcCancellation (2) * 32
+                                   (timelocks.srcPublicCancellation << 96n) |            // Stage.SrcPublicCancellation (3) * 32
+                                   (timelocks.dstWithdrawal << 128n) |                   // Stage.DstWithdrawal (4) * 32
+                                   (timelocks.dstPublicWithdrawal << 160n) |             // Stage.DstPublicWithdrawal (5) * 32
+                                   (timelocks.dstCancellation << 192n) |                 // Stage.DstCancellation (6) * 32
+                                   (currentTime << 224n)                                 // deployedAt timestamp
             console.log('🔍 Debug - amount:', amount)
             console.log('🔍 Debug - safetyDeposit:', safetyDeposit)
-            console.log('🔍 Debug - timelocks:', timelocks)
+            console.log('🔍 Debug - timelocks breakdown:')
+            console.log('  - srcWithdrawal:', timelocks.srcWithdrawal.toString())
+            console.log('  - srcPublicWithdrawal:', timelocks.srcPublicWithdrawal.toString())
+            console.log('  - srcCancellation:', timelocks.srcCancellation.toString())
+            console.log('  - srcPublicCancellation:', timelocks.srcPublicCancellation.toString())
+            console.log('  - dstWithdrawal:', timelocks.dstWithdrawal.toString())
+            console.log('  - dstPublicWithdrawal:', timelocks.dstPublicWithdrawal.toString())
+            console.log('  - dstCancellation:', timelocks.dstCancellation.toString())
+            console.log('  - deployedAt:', currentTime.toString())
+            console.log('🔍 Debug - packedTimelocks:', packedTimelocks.toString())
             
             const mockImmutables = [
                 orderHash, // orderHash - contains hashed apiOrder with Sui data
@@ -391,7 +423,7 @@ class CrossChainOrderManager {
                 TEST_CONFIG.ethereum.tokens.USDC.address, // token - EVM USDC address (keep as address)
                 amount, // amount
                 safetyDeposit, // safetyDeposit - proper uint256 value
-                timelocks  // timelocks - timestamp + 1 hour
+                packedTimelocks  // timelocks - packed with all 7 stages + deployedAt
             ]
             
             console.log('🔍 Debug - mockImmutables array:')
