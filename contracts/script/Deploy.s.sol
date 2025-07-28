@@ -49,13 +49,13 @@ import {Resolver} from "../src/Resolver.sol";
  */
 contract DeployScript is Script {
     // Sepolia testnet addresses (update these for other networks)
-    address constant LIMIT_ORDER_PROTOCOL_SEPOLIA = 0x119c71D3BbAC22029622cbaEc24854d3D32D2828; // 1inch LOP v4
-    address constant USDC_SEPOLIA = 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238; // USDC on Sepolia
-    address constant WETH_SEPOLIA = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14; // WETH on Sepolia
+    address constant _LIMIT_ORDER_PROTOCOL_SEPOLIA = 0x111111125421cA6dc452d289314280a0f8842A65; // 1inch LOP v4
+    address constant _USDC_SEPOLIA = 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238; // USDC on Sepolia
+    address constant _WETH_SEPOLIA = 0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14; // WETH on Sepolia
     
     // Deployment configuration
-    uint32 constant RESCUE_DELAY_SRC = 1800; // 30 minutes
-    uint32 constant RESCUE_DELAY_DST = 1800; // 30 minutes
+    uint32 constant _RESCUE_DELAY_SRC = 1800; // 30 minutes
+    uint32 constant _RESCUE_DELAY_DST = 1800; // 30 minutes
     
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -69,20 +69,20 @@ contract DeployScript is Script {
         // Step 1: Deploy TestEscrowFactory
         console.log("\n=== Deploying TestEscrowFactory ===");
         console.log("Constructor parameters:");
-        console.log("- limitOrderProtocol:", LIMIT_ORDER_PROTOCOL_SEPOLIA);
-        console.log("- feeToken (USDC):", USDC_SEPOLIA);
+        console.log("- limitOrderProtocol:", _LIMIT_ORDER_PROTOCOL_SEPOLIA);
+        console.log("- feeToken (USDC):", _USDC_SEPOLIA);
         console.log("- accessToken:", address(0), "(zero address - no access control)");
         console.log("- owner:", deployer);
-        console.log("- rescueDelaySrc:", RESCUE_DELAY_SRC, "seconds");
-        console.log("- rescueDelayDst:", RESCUE_DELAY_DST, "seconds");
+        console.log("- rescueDelaySrc:", _RESCUE_DELAY_SRC, "seconds");
+        console.log("- rescueDelayDst:", _RESCUE_DELAY_DST, "seconds");
         
         TestEscrowFactory escrowFactory = new TestEscrowFactory(
-            LIMIT_ORDER_PROTOCOL_SEPOLIA,  // limitOrderProtocol
-            IERC20(USDC_SEPOLIA),          // feeToken
+            _LIMIT_ORDER_PROTOCOL_SEPOLIA,  // limitOrderProtocol
+            IERC20(_USDC_SEPOLIA),          // feeToken
             IERC20(address(0)),            // accessToken (no access control)
             deployer,                      // owner
-            RESCUE_DELAY_SRC,              // rescueDelaySrc
-            RESCUE_DELAY_DST               // rescueDelayDst
+            _RESCUE_DELAY_SRC,              // rescueDelaySrc
+            _RESCUE_DELAY_DST               // rescueDelayDst
         );
         
         console.log("TestEscrowFactory deployed at:", address(escrowFactory));
@@ -93,12 +93,12 @@ contract DeployScript is Script {
         console.log("\n=== Deploying Resolver ===");
         console.log("Constructor parameters:");
         console.log("- factory:", address(escrowFactory));
-        console.log("- lop:", LIMIT_ORDER_PROTOCOL_SEPOLIA);
+        console.log("- lop:", _LIMIT_ORDER_PROTOCOL_SEPOLIA);
         console.log("- initialOwner:", deployer);
         
         Resolver resolver = new Resolver(
             escrowFactory,                 // factory (IEscrowFactory)
-            IOrderMixin(LIMIT_ORDER_PROTOCOL_SEPOLIA), // lop (IOrderMixin)
+            IOrderMixin(_LIMIT_ORDER_PROTOCOL_SEPOLIA), // lop (IOrderMixin)
             deployer                       // initialOwner
         );
         
@@ -143,12 +143,12 @@ contract DeployScript is Script {
             " src/TestEscrowFactory.sol:TestEscrowFactory",
             " --chain sepolia",
             " --constructor-args $(cast abi-encode \"constructor(address,address,address,address,uint32,uint32)\" ",
-            vm.toString(LIMIT_ORDER_PROTOCOL_SEPOLIA), " ",
-            vm.toString(USDC_SEPOLIA), " ",
+            vm.toString(_LIMIT_ORDER_PROTOCOL_SEPOLIA), " ",
+            vm.toString(_USDC_SEPOLIA), " ",
             vm.toString(address(0)), " ",
             vm.toString(deployer), " ",
-            vm.toString(RESCUE_DELAY_SRC), " ",
-            vm.toString(RESCUE_DELAY_DST), ")"
+            vm.toString(_RESCUE_DELAY_SRC), " ",
+            vm.toString(_RESCUE_DELAY_DST), ")"
         ));
         
         console.log("\nTo verify Resolver:");
@@ -159,7 +159,7 @@ contract DeployScript is Script {
             " --chain sepolia",
             " --constructor-args $(cast abi-encode \"constructor(address,address,address)\" ",
             vm.toString(address(escrowFactory)), " ",
-            vm.toString(LIMIT_ORDER_PROTOCOL_SEPOLIA), " ",
+            vm.toString(_LIMIT_ORDER_PROTOCOL_SEPOLIA), " ",
             vm.toString(deployer), ")"
         ));
     }

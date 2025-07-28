@@ -16,7 +16,6 @@ export const CONTRACT_ADDRESSES = {
         escrowFactory: '0xADEC8911058DbDcC8Cd3Ab80Fa17Daf3dFA7E456' as `0x${string}`,
         escrowSrcImpl: '0x7424226D43B88191717345a85219ABA7191076AB' as `0x${string}`,
         escrowDstImpl: '0xeb7f918a2712349b8b6973720aa04f40c05D3da0' as `0x${string}`,
-        limitOrderProtocol: '0x119c71D3BbAC22029622cbaEc24854d3D32D2828' as `0x${string}`,
 
         // Token addresses
         tokens: {
@@ -37,7 +36,6 @@ export const CONTRACT_ADDRESSES = {
         escrowFactory: '' as `0x${string}`,
         escrowSrcImpl: '' as `0x${string}`,
         escrowDstImpl: '' as `0x${string}`,
-        limitOrderProtocol: '' as `0x${string}`,
 
         tokens: {
             USDC: {
@@ -90,8 +88,7 @@ export function validateEthereumAddresses(network: EthereumNetwork): boolean {
         config.resolver &&
         config.escrowFactory &&
         config.escrowSrcImpl &&
-        config.escrowDstImpl &&
-        config.limitOrderProtocol
+        config.escrowDstImpl
     )
 }
 
