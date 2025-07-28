@@ -482,7 +482,7 @@ class CrossChainOrderManager {
                 amount: amount.toString(),
                 recipient: recipient,
                 refund: this.suiResolver.getAddress(),
-                withdrawalMs: 12, // 10 ms
+                withdrawalMs: 10, // 10 ms
                 publicWithdrawalMs: 1200000, // 20 minutes
                 cancellationMs: 1800000, // 30 minutes
                 publicCancellationMs: 2400000, // 40 minutes
