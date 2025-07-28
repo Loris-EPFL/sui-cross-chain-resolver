@@ -409,7 +409,7 @@ export async function exampleUsage() {
             amount: '5000', // 0.005 SUI in MIST
             recipient: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
             refund: '0x772cb3ccb855aac45bd2df96b250184fee970522871407d5f5f1074bf0585ee0',
-            withdrawalMs: 10000, // 10 secondes
+            withdrawalMs: 10, // 10 secondes
             publicWithdrawalMs: 20000, // 20 secondes
             cancellationMs: 30000, // 30 secondes
             publicCancellationMs: 40000, // 40 secondes
@@ -419,7 +419,7 @@ export async function exampleUsage() {
 
         console.log('timestamp_create', new Date().getTime());
         const createResult = await bridge.createLockObject(createParams);
-
+        
         console.log('createResult', createResult)
 
         if (createResult.success && createResult.lockId) {

@@ -438,7 +438,7 @@ class CrossChainOrderManager {
     /**
      * Execute Sui side of the swap
      */
-    async executeSuiSwap(amount: bigint, secret: string, recipient: string): Promise<{ escrowId: string; txHash: string }> {
+    async executeSuiSwap(amount: bigint, secret: string, recipient: string): Promise<{ escrowId: string; txHash: string; initVersion: bigint }> {
         try {
             console.log('⚡ Executing Sui side of swap...')
 
@@ -450,7 +450,7 @@ class CrossChainOrderManager {
                 amount: amount.toString(),
                 recipient: recipient,
                 refund: this.suiResolver.getAddress(),
-                withdrawalMs: 600000, // 10 minutes
+                withdrawalMs: 12, // 10 ms
                 publicWithdrawalMs: 1200000, // 20 minutes
                 cancellationMs: 1800000, // 30 minutes
                 publicCancellationMs: 2400000, // 40 minutes
@@ -468,7 +468,8 @@ class CrossChainOrderManager {
 
             return {
                 escrowId: result.lockId!,
-                txHash: result.txDigest!
+                txHash: result.txDigest!,
+                initVersion: result.initVersion!
             }
         } catch (error) {
             console.error('Error executing Sui swap:', error)
@@ -479,7 +480,7 @@ class CrossChainOrderManager {
     /**
      * Complete cross-chain swap by revealing secret
      */
-    async completeSwap(ethEscrowAddress: string, suiEscrowId: string, secret: string): Promise<{ suiWithdrawal: any; secretRevealed: string }> {
+    async completeSwap(ethEscrowAddress: string, suiEscrowId: string, secret: string, initVersion?: bigint): Promise<{ suiWithdrawal: any; secretRevealed: string }> {
         try {
             console.log('🔓 Completing cross-chain swap with secret revelation...')
 
@@ -487,10 +488,18 @@ class CrossChainOrderManager {
             const withdrawParams = {
                 lockId: suiEscrowId,
                 secret: secret,
-                initVersion : 0n,
+                initVersion: initVersion || 0n, // Use provided initVersion or default to 0
             }
             const suiResult = await this.suiResolver.withdrawLock(withdrawParams)
-            
+            // For testing, we can cancel the lock instead of withdrawing
+            /*
+            const cancelParams = {
+                lockId: suiEscrowId,
+                secret: secret,
+                initVersion: initVersion || 0n, // Use provided initVersion or default to 0
+            }
+            const suiResult = await this.suiResolver.cancelLock(cancelParams)
+            */
             if (!suiResult.success) {
                 throw new Error(`Failed to withdraw from Sui lock: ${suiResult.error}`)
             }
@@ -929,11 +938,28 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             const readyFills = await apiClient.getReadyToAcceptSecretFills(order.orderHash || order.orderId)
             console.log('✅ Ready fills checked:', readyFills)
 
-            // TODO: Execute withdrawal on Sui using revealed secret
-            console.log('🔧 TODO: Execute withdrawal on Sui using revealed secret')
-            console.log('   🔓 Use secret to unlock Sui escrow')
-            console.log('   💸 Transfer 99 USDC to user on Sui')
-            console.log('   📡 Emit withdrawal event for monitoring')
+            // Execute withdrawal on Sui using revealed secret
+            console.log('🔧 Executing withdrawal on Sui using revealed secret...')
+            
+            // First, create a Sui escrow (simulate the destination escrow creation)
+            console.log('🏗️ Creating Sui escrow for withdrawal test...')
+            const suiEscrowResult = await orderManager.executeSuiSwap(
+                parseUnits('99', 6), // 99 USDC equivalent in SUI
+                secret,
+                userAddress // recipient address
+            )
+            console.log('✅ Sui escrow created:', suiEscrowResult.escrowId)
+            
+            // Now withdraw from the Sui escrow using the secret
+            console.log('🔓 Withdrawing from Sui escrow using secret...')
+            const suiWithdrawalResult = await orderManager.completeSwap(
+                ethResult.escrowAddress,
+                suiEscrowResult.escrowId,
+                secret,
+                suiEscrowResult.initVersion // Pass the initVersion from escrow creation
+            )
+            console.log('✅ Sui withdrawal completed:', suiWithdrawalResult.suiWithdrawal?.txDigest)
+            console.log('🔑 Secret revealed:', suiWithdrawalResult.secretRevealed)
 
             // Phase 4: RECOVERY - Resolver Claims
             console.log('\n🔄 Phase 4: RECOVERY - Resolver Claims')
