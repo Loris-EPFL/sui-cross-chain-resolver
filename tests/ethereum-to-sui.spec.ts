@@ -111,18 +111,19 @@ class EthereumResolver {
         try {
             // Parse signature using viem's parseSignature utility
             const { r, s, yParity } = parseSignature(signature as `0x${string}`)
-            // For EIP-2098 compact signature format: vs = s + (yParity << 255)
+            // For EIP-2098 compact signature format: yParityAndS = (yParity << 255) | s
+            // This correctly implements the EIP-2098 standard
             const sBigInt = BigInt(s)
-            const yParityBit = BigInt(yParity) << 255n
-            const vsBigInt = sBigInt | yParityBit
+            const yParityBigInt = BigInt(yParity)
+            const vsBigInt = (yParityBigInt << 255n) | sBigInt
             const vs = `0x${vsBigInt.toString(16).padStart(64, '0')}` as `0x${string}`
 
             console.log('🔍 Debug - deploySrc parameters:')
             console.log('  signature:', signature)
             console.log('  r:', r, 'type:', typeof r, 'length:', r.length)
             console.log('  vs:', vs, 'type:', typeof vs, 'length:', vs.length)
-            console.log('  amount:', amount, 'type:', typeof amount)
-            console.log('  takerTraits:', takerTraits, 'type:', typeof takerTraits)
+            console.log('  amount:', amount.toString(), 'type:', typeof amount)
+            console.log('  takerTraits:', takerTraits.toString(), 'type:', typeof takerTraits)
             
             console.log('🔍 Debug - immutables parameter:')
             immutables.forEach((item, index) => {
