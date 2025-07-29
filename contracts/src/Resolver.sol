@@ -65,14 +65,14 @@ contract Resolver is Ownable {
         takerTraits = TakerTraits.wrap(TakerTraits.unwrap(takerTraits) | uint256(1 << 251));
         bytes memory argsMem = abi.encodePacked(computed, args);
         // Commented out for mock implementation - testing hash timelock contracts without LOP dependency
-        // _LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
+        _LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
     }
 
     /**
      * @notice See {IResolverExample-deployDst}.
      */
     function deployDst(IBaseEscrow.Immutables calldata dstImmutables, uint256 srcCancellationTimestamp) external onlyOwner payable {
-        _FACTORY.createDstEscrow{value: msg.value}(dstImmutables, srcCancellationTimestamp);
+       _FACTORY.createDstEscrow{value: msg.value}(dstImmutables, srcCancellationTimestamp);
     }
 
     function withdraw(IEscrow escrow, bytes32 secret, IBaseEscrow.Immutables calldata immutables) external {
@@ -83,7 +83,7 @@ contract Resolver is Ownable {
     function cancel(IEscrow escrow, IBaseEscrow.Immutables calldata immutables) external {
         escrow.cancel(immutables);
     }
-
+ 
     /**
      * @notice See {IResolverExample-arbitraryCalls}.
      */

@@ -194,6 +194,20 @@ export class SuiHTLCBridge {
         console.log('🔧 Function: oneinch_move::withdraw');
         
         try {
+            
+            if (!params.initVersion || params.initVersion === 0n) {
+                const obj = await this.client.getObject({
+                  id: params.lockId,
+                  options: { showOwner: true },
+                });
+                const shared = (obj.data as any)?.owner?.Shared;
+                if (!shared?.initial_shared_version) {
+                  throw new Error(`Lock ${params.lockId} is not shared or initial_shared_version unavailable`);
+                }
+                params.initVersion = BigInt(shared.initial_shared_version);
+            }
+
+
             const tx = new Transaction();
 
             
@@ -380,6 +394,7 @@ export class SuiHTLCBridge {
 }
 
 // Example usage function
+/*
 export async function exampleUsage() {
     console.log('🚀 Starting Sui HTLC Bridge Example...');
     console.log('�� Package ID:', SUI_PACKAGE_ID);
@@ -570,7 +585,7 @@ export async function exampleUsage() {
             console.log('Cancel result_thirdparty:', cancelResultThirdParty);
             //console.log('Cancel result:', cancelResult);
             console.log('');
-            */
+            
 
         } else {
             console.error('❌ Failed to create lock:', createResult.error);
@@ -586,6 +601,7 @@ export async function exampleUsage() {
         console.log('4. Your package on', SUI_NETWORK, ':', `https://suiexplorer.com/object/${SUI_PACKAGE_ID}?network=${SUI_NETWORK}`);
     }
 }
+*/
 
 // // // Run if this file is executed directly
 // if (require.main === module) {
