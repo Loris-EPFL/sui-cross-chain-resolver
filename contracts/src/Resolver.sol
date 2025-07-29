@@ -65,7 +65,7 @@ contract Resolver is Ownable {
         takerTraits = TakerTraits.wrap(TakerTraits.unwrap(takerTraits) | uint256(1 << 251));
         bytes memory argsMem = abi.encodePacked(computed, args);
         // Commented out for mock implementation - testing hash timelock contracts without LOP dependency
-        // _LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
+        _LOP.fillOrderArgs(order, r, vs, amount, takerTraits, argsMem);
     }
 
     /**

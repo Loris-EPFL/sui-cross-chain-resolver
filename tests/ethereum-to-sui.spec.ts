@@ -88,7 +88,7 @@ class EthereumResolver {
         signature: string,
         takerTraits: any,
         amount: bigint
-    ): Promise<{txHash: string; blockHash: string; escrowAddress: string}> {
+    ): Promise<{txHash: string; blockHash: string}> {
         try {
             // Parse signature using viem's parseSignature utility
             const { r, s, yParity } = parseSignature(signature as `0x${string}`)
@@ -137,15 +137,31 @@ class EthereumResolver {
             const receipt = await this.publicClient.waitForTransactionReceipt({hash})
 
             console.log(`🔧 Deployed source escrow with amount: ${amount}`)
-            console.log(`📍 Transaction hash: ${hash}`)
+            console.log(`📍 Transaction hash: ${hash}`, 'with receipt ', receipt)
 
             return {
                 txHash: hash,
-                blockHash: receipt.blockHash,
-                escrowAddress: receipt.contractAddress || `0x${randomBytes(20).toString('hex')}`
+                blockHash: receipt.blockHash
             }
         } catch (error) {
             console.error('Error in deploySrc:', error)
+            throw error
+        }
+    }
+
+    async getEscrowAddress(mockImmutables: any[]): Promise<string> {
+        try {
+            const escrowAddress = await this.publicClient.readContract({
+                address: this.escrowFactoryAddress as `0x${string}`,
+                abi: ESCROW_FACTORY_ABI,
+                functionName: 'addressOfEscrowSrc',
+                args: [mockImmutables]
+            })
+            
+            console.log(`📍 Read escrow address: ${escrowAddress}`)
+            return escrowAddress as string
+        } catch (error) {
+            console.error('Error reading escrow address:', error)
             throw error
         }
     }
@@ -159,7 +175,7 @@ class EthereumResolver {
                 address: this.resolverAddress,
                 abi: RESOLVER_ABI,
                 functionName: 'withdraw',
-                args: [escrowAddress, secret, immutables.build()]
+                args: [escrowAddress, secret, immutables]
             })
 
             const receipt = await this.publicClient.waitForTransactionReceipt({hash})
@@ -342,7 +358,7 @@ class CrossChainOrderManager {
     /**
      * Execute Ethereum side of the swap (simplified for mock API testing)
      */
-    async executeEthereumSwap(apiOrder: any, signature: string, amount: bigint, secret: string): Promise<{ txHash: string; escrowAddress: string }> {
+    async executeEthereumSwap(apiOrder: any, signature: string, amount: bigint, secret: string): Promise<{ txHash: string; escrowAddress: string; mockImmutables: any[] }> {
         try {
             console.log('⚡ Executing Ethereum side of swap...')
 
@@ -415,7 +431,16 @@ class CrossChainOrderManager {
                 amount
             )
 
-            return result
+            // Get the actual escrow address using the read function
+            const escrowAddress = await this.ethereumResolver.getEscrowAddress(mockImmutables)
+
+            console.log('✅ Escrow address retrieved: ', escrowAddress)
+
+            return {
+                txHash: result.txHash,
+                escrowAddress,
+                mockImmutables
+            }
         } catch (error) {
             console.error('Error executing Ethereum swap:', error)
             throw error
@@ -463,7 +488,7 @@ class CrossChainOrderManager {
     /**
      * Complete cross-chain swap by revealing secret
      */
-    async completeSwap(ethEscrowAddress: string, suiEscrowId: string, secret: string, initVersion?: bigint): Promise<{ suiWithdrawal: any; secretRevealed: string }> {
+    async completeSwap(ethEscrowAddress: string, suiEscrowId: string, secret: string, immutables: any, initVersion?: bigint): Promise<{ suiWithdrawal: any; ethWithdrawal: any; secretRevealed: string }> {
         try {
             // Withdraw from Sui HTLC lock first (user gets destination tokens)
             const withdrawParams = {
@@ -477,10 +502,20 @@ class CrossChainOrderManager {
                 throw new Error(`Failed to withdraw from Sui lock: ${suiResult.error}`)
             }
 
+            // After successful Sui withdrawal, withdraw from Ethereum escrow
+            const ethResult = await this.ethereumResolver.withdraw(
+                ethEscrowAddress as `0x${string}`,
+                secret,
+                immutables
+            )
+
             return {
                 suiWithdrawal: suiResult,
+                ethWithdrawal: ethResult,
                 secretRevealed: secret
             }
+
+            
         } catch (error) {
             console.error('Error completing swap:', error)
             throw error
@@ -579,7 +614,9 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 const completionResult = await orderManager.completeSwap(
                     ethResult.escrowAddress,
                     suiResult.escrowId,
-                    secret
+                    secret,
+                    ethResult.mockImmutables,
+                    suiResult.initVersion
                 )
 
                 // Step 7: Monitor order status
@@ -801,6 +838,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 ethResult.escrowAddress,
                 suiEscrowResult.escrowId,
                 secret,
+                ethResult.mockImmutables,
                 suiEscrowResult.initVersion // Pass the initVersion from escrow creation
             )
 
