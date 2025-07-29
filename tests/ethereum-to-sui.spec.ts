@@ -345,39 +345,20 @@ class CrossChainOrderManager {
     async executeEthereumSwap(apiOrder: any, signature: string, amount: bigint, secret: string): Promise<{ txHash: string; escrowAddress: string }> {
         try {
             console.log('⚡ Executing Ethereum side of swap...')
-            console.log('🔍 Debug - secret:', secret)
-            console.log('🔍 Debug - secret type:', typeof secret)
-            console.log('🔍 Debug - secret length:', secret.length)
-            console.log('🔍 Debug - apiOrder:', JSON.stringify(apiOrder, null, 2))
 
             // Create mock immutables and order for testing
-            const hashLock = keccak256(toHex(secret)) // Returns exactly 32 bytes (0x + 64 hex chars)
-            console.log('🔍 Debug - hashLock:', hashLock)
-            console.log('🔍 Debug - hashLock type:', typeof hashLock)
-            console.log('🔍 Debug - hashLock length:', hashLock.length)
+            const hashLock = keccak256(toHex(secret))
             
             // Hash the apiOrder (which contains Sui data) into the orderHash
-            // If apiOrder is empty or undefined, use a default value
             const orderData = apiOrder && Object.keys(apiOrder).length > 0 
                 ? JSON.stringify(apiOrder) 
                 : JSON.stringify({ orderId: 'mock-order-' + Date.now(), timestamp: Date.now() })
-            const orderHash = keccak256(toHex(orderData)) // Returns exactly 32 bytes
-            console.log('🔍 Debug - orderData:', orderData)
-            console.log('🔍 Debug - orderHash:', orderHash)
-            console.log('🔍 Debug - orderHash type:', typeof orderHash)
-            console.log('🔍 Debug - orderHash length:', orderHash.length)
+            const orderHash = keccak256(toHex(orderData))
             
-            const makerAddress = this.ethereumResolver.getAddress() // User's EVM wallet
-            const takerAddress = this.ethereumResolver.getResolverAddress() // Resolver EVM address
-            console.log('🔍 Debug - makerAddress:', makerAddress)
-            console.log('🔍 Debug - takerAddress:', takerAddress)
+            const makerAddress = this.ethereumResolver.getAddress()
+            const takerAddress = this.ethereumResolver.getResolverAddress()
             
-            // Use proper 32-byte values for contract ABI
-            const salt = keccak256(toHex(`salt-${Date.now()}`)) // Generate proper 32-byte salt
-            console.log('🔍 Debug - salt:', salt)
-            console.log('🔍 Debug - salt type:', typeof salt)
-            console.log('🔍 Debug - salt length:', salt.length)
-            
+            const salt = keccak256(toHex(`salt-${Date.now()}`))
             const safetyDeposit = parseUnits('0', 6)
             
             // Create timelocks with small intervals for testing based on TimelocksLib.sol stages
@@ -393,63 +374,38 @@ class CrossChainOrderManager {
             }
             
             // Pack timelocks into a single uint256 as expected by the contract
-            // Based on TimelocksSettersLib.sol structure
-            // Each stage uses 32 bits, deployedAt uses the upper 32 bits
-            const packedTimelocks = (timelocks.srcWithdrawal << 0n) |                    // Stage.SrcWithdrawal (0) * 32
-                                   (timelocks.srcPublicWithdrawal << 32n) |              // Stage.SrcPublicWithdrawal (1) * 32
-                                   (timelocks.srcCancellation << 64n) |                  // Stage.SrcCancellation (2) * 32
-                                   (timelocks.srcPublicCancellation << 96n) |            // Stage.SrcPublicCancellation (3) * 32
-                                   (timelocks.dstWithdrawal << 128n) |                   // Stage.DstWithdrawal (4) * 32
-                                   (timelocks.dstPublicWithdrawal << 160n) |             // Stage.DstPublicWithdrawal (5) * 32
-                                   (timelocks.dstCancellation << 192n) |                 // Stage.DstCancellation (6) * 32
-                                   (currentTime << 224n)                                 // deployedAt timestamp
-            console.log('🔍 Debug - amount:', amount)
-            console.log('🔍 Debug - safetyDeposit:', safetyDeposit)
-            console.log('🔍 Debug - timelocks breakdown:')
-            console.log('  - srcWithdrawal:', timelocks.srcWithdrawal.toString())
-            console.log('  - srcPublicWithdrawal:', timelocks.srcPublicWithdrawal.toString())
-            console.log('  - srcCancellation:', timelocks.srcCancellation.toString())
-            console.log('  - srcPublicCancellation:', timelocks.srcPublicCancellation.toString())
-            console.log('  - dstWithdrawal:', timelocks.dstWithdrawal.toString())
-            console.log('  - dstPublicWithdrawal:', timelocks.dstPublicWithdrawal.toString())
-            console.log('  - dstCancellation:', timelocks.dstCancellation.toString())
-            console.log('  - deployedAt:', currentTime.toString())
-            console.log('🔍 Debug - packedTimelocks:', packedTimelocks.toString())
+            const packedTimelocks = (timelocks.srcWithdrawal << 0n) |
+                                   (timelocks.srcPublicWithdrawal << 32n) |
+                                   (timelocks.srcCancellation << 64n) |
+                                   (timelocks.srcPublicCancellation << 96n) |
+                                   (timelocks.dstWithdrawal << 128n) |
+                                   (timelocks.dstPublicWithdrawal << 160n) |
+                                   (timelocks.dstCancellation << 192n) |
+                                   (currentTime << 224n)
             
             const mockImmutables = [
-                orderHash, // orderHash - contains hashed apiOrder with Sui data
-                hashLock, // hashlock - secret hash for HTLC
-                makerAddress, // maker - user's EVM wallet address (keep as address)
-                takerAddress, // taker - resolver EVM address (keep as address)
-                TEST_CONFIG.ethereum.tokens.USDC.address, // token - EVM USDC address (keep as address)
-                amount, // amount
-                safetyDeposit, // safetyDeposit - proper uint256 value
-                packedTimelocks  // timelocks - packed with all 7 stages + deployedAt
+                orderHash,
+                hashLock,
+                makerAddress,
+                takerAddress,
+                TEST_CONFIG.ethereum.tokens.USDC.address,
+                amount,
+                safetyDeposit,
+                packedTimelocks
             ]
-            
-            console.log('🔍 Debug - mockImmutables array:')
-            mockImmutables.forEach((item, index) => {
-                console.log(`  [${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
-            })
             
             const mockOrder = [
-                salt, // salt - proper 32-byte value
-                makerAddress, // maker - user's EVM wallet (keep as address)
-                takerAddress, // receiver - resolver EVM address (keep as address)
-                TEST_CONFIG.ethereum.tokens.USDC.address, // makerAsset - Ethereum USDC (keep as address)
-                TEST_CONFIG.ethereum.tokens.USDC.address, // takerAsset - Ethereum USDC (keep as address)
-                amount, // makingAmount
-                amount, // takingAmount
-                BigInt(1)  // makerTraits - proper uint256 value
+                salt,
+                makerAddress,
+                takerAddress,
+                TEST_CONFIG.ethereum.tokens.USDC.address,
+                TEST_CONFIG.ethereum.tokens.USDC.address,
+                amount,
+                amount,
+                BigInt(1)
             ]
             
-            console.log('🔍 Debug - mockOrder array:')
-            mockOrder.forEach((item, index) => {
-                console.log(`  [${index}]:`, item, 'type:', typeof item, 'length:', item?.length || 'N/A')
-            })
-            
             const mockTakerTraits = BigInt(1)
-            console.log('🔍 Debug - mockTakerTraits:', mockTakerTraits)
             
             const result = await this.ethereumResolver.deploySrc(
                 mockImmutables,
@@ -458,8 +414,6 @@ class CrossChainOrderManager {
                 mockTakerTraits,
                 amount
             )
-
-            console.log('✅ Ethereum escrow deployed:', result.txHash)
 
             return result
         } catch (error) {
@@ -473,8 +427,6 @@ class CrossChainOrderManager {
      */
     async executeSuiSwap(amount: bigint, secret: string, recipient: string): Promise<{ escrowId: string; txHash: string; initVersion: bigint }> {
         try {
-            console.log('⚡ Executing Sui side of swap...')
-
             const hashLock = sha256(toHex(secret))
             
             // Create HTLC lock object on Sui
@@ -497,8 +449,6 @@ class CrossChainOrderManager {
                 throw new Error(`Failed to create Sui lock object: ${result.error}`)
             }
 
-            console.log('✅ Sui HTLC lock created:', result.txDigest)
-
             return {
                 escrowId: result.lockId!,
                 txHash: result.txDigest!,
@@ -515,8 +465,6 @@ class CrossChainOrderManager {
      */
     async completeSwap(ethEscrowAddress: string, suiEscrowId: string, secret: string, initVersion?: bigint): Promise<{ suiWithdrawal: any; secretRevealed: string }> {
         try {
-            console.log('🔓 Completing cross-chain swap with secret revelation...')
-
             // Withdraw from Sui HTLC lock first (user gets destination tokens)
             const withdrawParams = {
                 lockId: suiEscrowId,
@@ -524,23 +472,10 @@ class CrossChainOrderManager {
                 initVersion: initVersion || 0n, // Use provided initVersion or default to 0
             }
             const suiResult = await this.suiResolver.withdrawLock(withdrawParams)
-            // For testing, we can cancel the lock instead of withdrawing
-            /*
-            const cancelParams = {
-                lockId: suiEscrowId,
-                secret: secret,
-                initVersion: initVersion || 0n, // Use provided initVersion or default to 0
-            }
-            const suiResult = await this.suiResolver.cancelLock(cancelParams)
-            */
+            
             if (!suiResult.success) {
                 throw new Error(`Failed to withdraw from Sui lock: ${suiResult.error}`)
             }
-            
-            console.log('✅ Sui withdrawal completed:', suiResult.txDigest)
-
-            // Then resolver can withdraw from Ethereum escrow
-            console.log('🔄 Resolver can now withdraw from Ethereum escrow using revealed secret')
 
             return {
                 suiWithdrawal: suiResult,
@@ -562,15 +497,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
     let suiAddress: string
 
     beforeAll(async () => {
-        // Note: Mock backend server should be started separately
-        // Run: cd mock-backend && npm start
-        console.log('🚀 Starting Ethereum to Sui cross-chain tests with deployed contracts')
-        console.log('📋 Using deployed contracts on Sepolia:')
-        console.log(`   - TestEscrowFactory: ${TEST_CONFIG.ethereum.escrowFactory}`)
-        console.log(`   - Resolver: ${TEST_CONFIG.ethereum.resolver}`)
-        console.log(`   - EscrowSrc Implementation: ${TEST_CONFIG.ethereum.escrowSrcImpl}`)
-        console.log(`   - EscrowDst Implementation: ${TEST_CONFIG.ethereum.escrowDstImpl}`)
-
         // Validate environment variables
         const privateKey = process.env.PRIVATE_KEY
 
@@ -589,25 +515,20 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         )
 
         // Initialize Sui resolver
-        suiResolver = new SuiHTLCBridge()
+        suiResolver = new SuiHTLCBridge(process.env.SUI_PRIVATE_KEY_INIT)
 
         userAddress = ethereumResolver.getAddress()
         suiAddress = suiResolver.getAddress()
-        console.log('👤 Ethereum address:', userAddress)
-        console.log('👤 Sui address:', suiAddress)
 
         // Initialize order manager
         orderManager = new CrossChainOrderManager(apiClient, ethereumResolver, suiResolver)
-
-        console.log('✅ Initialization completed')
 
         // Wait a moment to ensure everything is ready
         await new Promise((resolve) => setTimeout(resolve, 100))
     }, 30000)
 
     afterAll(async () => {
-        console.log('🏁 Ethereum to Sui cross-chain test completed')
-        console.log('📝 Note: Stop the mock backend server manually if needed')
+        // Cleanup if needed
     })
 
     describe('Complete Cross-Chain Flow', () => {
@@ -615,17 +536,11 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             const makingAmount = parseUnits('100', TEST_CONFIG.ethereum.tokens.USDC.decimals)
             const takingAmount = parseUnits('99', TEST_CONFIG.sui.tokens.USDC.decimals)
 
-            console.log('🌉 Starting complete Ethereum to Sui cross-chain swap...')
-            console.log(`💰 Swapping ${makingAmount} USDC (ETH) -> ${takingAmount} USDC (SUI)`)
-
             try {
                 // Step 1: Check initial balances
-                console.log('\n📊 Checking initial balances...')
                 const initialBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
-                console.log(`Initial USDC balance: ${initialBalance}`)
 
                 // Step 2: Create cross-chain order via API
-                console.log('\n📋 Creating cross-chain order...')
                 const {quote, order, secret} = await orderManager.createOrder(
                     TEST_CONFIG.ethereum.chainId,
                     TEST_CONFIG.sui.chainId,
@@ -637,9 +552,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 )
 
                 // Step 3: Sign order using proper EIP-712 signing
-                console.log('\n✍️ Signing order...')
-                
-                // Create the order object that matches the EIP-712 structure
                 const salt = keccak256(toHex(`salt-${Date.now()}`))
                 const makerAddress = ethereumResolver.getAddress()
                 const takerAddress = ethereumResolver.getResolverAddress()
@@ -651,27 +563,19 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                     makerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
                     takerAsset: TEST_CONFIG.ethereum.tokens.USDC.address,
                     makingAmount: makingAmount,
-                    takingAmount: makingAmount,
+                    takingAmount: takingAmount,
                     makerTraits: BigInt(1)
                 }
                 
-                console.log('📝 Order to sign:', JSON.stringify(orderToSign, (key, value) => 
-                    typeof value === 'bigint' ? value.toString() : value, 2))
-                
                 const signature = await ethereumResolver.signOrder(TEST_CONFIG.ethereum.chainId, orderToSign)
-                console.log('✅ Generated signature:', signature)
-                console.log('📏 Signature length:', signature.length)
 
                 // Step 4: Execute Ethereum side
-                console.log('\n⚡ Executing Ethereum side...')
                 const ethResult = await orderManager.executeEthereumSwap(order, signature, makingAmount, secret)
 
                 // Step 5: Execute Sui side
-                console.log('\n⚡ Executing Sui side...')
                 const suiResult = await orderManager.executeSuiSwap(takingAmount, secret, suiAddress)
 
                 // Step 6: Complete the swap
-                console.log('\n🔓 Completing cross-chain swap...')
                 const completionResult = await orderManager.completeSwap(
                     ethResult.escrowAddress,
                     suiResult.escrowId,
@@ -679,18 +583,14 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 )
 
                 // Step 7: Monitor order status
-                console.log('\n👀 Monitoring order status...')
                 try {
                     const activeOrders = await apiClient.getActiveOrders({page: 1, limit: 10})
-                    console.log(`Found ${activeOrders?.length || 0} active orders`)
                 } catch (error) {
-                    console.log('ℹ️ Could not retrieve active orders (expected in test environment)')
+                    // Expected in test environment
                 }
 
                 // Step 8: Check final balances
-                console.log('\n📊 Checking final balances...')
                 const finalBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
-                console.log(`Final USDC balance: ${finalBalance}`)
 
                 // Verify the flow completed without critical errors
                 expect(ethResult).toBeDefined()
@@ -702,10 +602,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 expect(secret).toBeDefined()
                 expect(quote).toBeDefined()
                 expect(order).toBeDefined()
-
-                console.log('\n🎉 Ethereum to Sui cross-chain swap flow completed successfully!')
-                console.log('✅ Both Ethereum and Sui sides executed')
-                console.log('✅ Secret revealed and swap completed atomically')
             } catch (error: any) {
                 console.error('❌ Cross-chain swap error:', error.message)
 
@@ -720,8 +616,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         }, 60000) // 60 second timeout
 
         it('should handle API integration for Ethereum to Sui', async () => {
-            console.log('🧪 Testing API integration for Ethereum to Sui swap...')
-
             try {
                 // Test quote endpoint
                 const quoteParams = {
@@ -736,14 +630,10 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
                 const quote = await apiClient.getQuote(quoteParams)
                 expect(quote).toBeDefined()
-                console.log('✅ Quote API test passed')
 
                 // Test escrow factory endpoint
                 const escrowFactory = await apiClient.getEscrowFactory(TEST_CONFIG.ethereum.chainId)
                 expect(escrowFactory).toBeDefined()
-                console.log('✅ Escrow factory API test passed')
-
-                console.log('🎯 All API integration tests passed')
             } catch (error: any) {
                 console.error('❌ API integration error:', error.message)
                 console.log('ℹ️ API errors are expected in test environment')
@@ -751,30 +641,22 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         })
 
         it('should demonstrate viem wallet client setup', async () => {
-            console.log('🔧 Testing viem wallet client setup...')
-
             // Verify wallet client is properly configured
             expect(ethereumResolver).toBeDefined()
             expect(ethereumResolver.getAddress()).toMatch(/^0x[a-fA-F0-9]{40}$/)
 
-            console.log('✅ Viem wallet client configured correctly')
-            console.log(`📍 Wallet address: ${ethereumResolver.getAddress()}`)
-
             // Test balance reading
             try {
                 const balance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
-                console.log(`💰 Current USDC balance: ${balance}`)
                 expect(typeof balance).toBe('bigint')
             } catch (error) {
-                console.log('ℹ️ Balance check failed (expected in test environment)')
+                // Expected in test environment
             }
         })
     })
 
     describe('Configuration Validation', () => {
         it('should validate test configuration', () => {
-            console.log('🔍 Validating test configuration...')
-
             // Validate Ethereum config
             expect(TEST_CONFIG.ethereum.chainId).toBe(11155111)
             expect(TEST_CONFIG.ethereum.tokens.USDC.address).toMatch(/^0x[a-fA-F0-9]{40}$/)
@@ -783,15 +665,9 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             // Validate Sui config
             expect(TEST_CONFIG.sui.chainId).toBe(101)
             expect(TEST_CONFIG.sui.tokens.USDC.address).toContain('::usdc::USDC')
-
-            console.log('✅ Configuration validation passed')
-            console.log('📋 Ethereum Chain ID:', TEST_CONFIG.ethereum.chainId)
-            console.log('📋 Sui Chain ID:', TEST_CONFIG.sui.chainId)
         })
 
         it('should get quote for Ethereum USDC to Sui USDC swap', async () => {
-            console.log('\n📊 Getting quote for cross-chain swap...')
-
             const quoteRequest = {
                 srcChainId: TEST_CONFIG.ethereum.chainId,
                 dstChainId: TEST_CONFIG.sui.chainId,
@@ -802,20 +678,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 enableEstimate: true
             }
 
-            console.log('📋 Quote request:', {
-                ...quoteRequest,
-                amount: `${Number(quoteRequest.amount) / 10 ** TEST_CONFIG.ethereum.tokens.USDC.decimals} USDC`
-            })
-
             try {
                 const quote = await apiClient.getQuote(quoteRequest)
-
-                console.log('💰 Quote received:', {
-                    quoteId: quote.quoteId,
-                    srcAmount: `${Number(quote.srcAmount || quoteRequest.amount) / 10 ** TEST_CONFIG.ethereum.tokens.USDC.decimals} USDC`,
-                    dstAmount: `${Number(quote.dstAmount || quoteRequest.amount) / 10 ** TEST_CONFIG.sui.tokens.USDC.decimals} USDC`
-                })
-
                 expect(quote).toBeDefined()
                 expect(quote.quoteId).toBeDefined()
             } catch (error: any) {
@@ -824,14 +688,10 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         }, 15000)
 
         it('should create and submit cross-chain order using mock API', async () => {
-            console.log('\n📝 Testing order creation and submission using mock API...')
-
             try {
                 // Phase 1: Generate secret and hash for order
                 const secret = `0x${randomBytes(32).toString('hex')}`
                 const secretHash = keccak256(toHex(secret))
-
-                console.log('🔄 Phase 1: Creating cross-chain order via mock API')
 
                 // Create order parameters
                 const orderParams = {
@@ -857,16 +717,14 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
                 const quote = await apiClient.getQuote(quoteParams)
                 const apiOrder = await apiClient.createOrder(quote, orderParams)
-                console.log('✅ Order created via API successfully')
 
                 // Check order status if available
                 if (apiOrder.orderHash) {
                     try {
                         const orderStatus = await apiClient.getOrderStatus(apiOrder.orderHash)
-                        console.log('✅ Order status checked:', orderStatus)
                         expect(orderStatus).toBeDefined()
                     } catch (error) {
-                        console.log('ℹ️ Order status not available (expected in test environment)')
+                        // Expected in test environment
                     }
                 }
 
@@ -879,11 +737,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         }, 20000)
 
         it('should simulate complete Fusion+ cross-chain swap flow (Ethereum Sepolia → Sui)', async () => {
-            console.log('\n🌉 Testing complete Fusion+ cross-chain swap flow...')
-
             // Phase 1: ANNOUNCEMENT - Order Creation (using mock API)
-            console.log('\n🔄 Phase 1: ANNOUNCEMENT - Order Creation')
-
             const secret = `0x${randomBytes(32).toString('hex')}`
             const secretHash = keccak256(toHex(secret))
 
@@ -911,14 +765,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
             const quote = await apiClient.getQuote(quoteParams)
             const order = await apiClient.createOrder(quote, orderParams)
-            console.log('✅ Quote obtained from F+ Quoter API:', quote.quoteId)
-            console.log('📋 Order created via API')
 
             // Phase 2: DEPOSIT - Escrow Deployment
-            console.log('\n💰 Phase 2: DEPOSIT - Escrow Deployment')
-
-            // Generate proper EIP-712 signature instead of mock
-            console.log('🔑 Generating EIP-712 signature for order...')
             const orderToSign = {
                 salt: keccak256(toHex(`salt-${Date.now()}`)),
                 maker: ethereumResolver.getAddress(),
@@ -929,13 +777,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 takingAmount: parseUnits('100', 6),
                 makerTraits: BigInt(1)
             }
-            console.log('📝 Order to sign:', orderToSign)
             
             const signature = await ethereumResolver.signOrder(TEST_CONFIG.ethereum.chainId, orderToSign)
-            console.log('✅ Generated signature:', signature)
-
-            // Simulate resolver deploying source escrow on Ethereum using mock API
-            console.log('🔧 Resolver deploying source escrow on Ethereum Sepolia...')
 
             const ethResult = await orderManager.executeEthereumSwap(
                 order,
@@ -943,72 +786,25 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 parseUnits('100', 6),
                 secret
             )
-            console.log(`✅ Source escrow deployed at: ${ethResult.escrowAddress}`)
-
-            // TODO: Deploy destination escrow on Sui
-            console.log('🔧 TODO: Deploy destination escrow on Sui testnet')
-            console.log('   📦 Initialize Sui client with testnet RPC')
-            console.log('   📦 Deploy cross-chain escrow Move package')
-            console.log('   📦 Create escrow object with matching parameters:')
-            console.log(`      - hashLock: ${secretHash}`)
-            console.log(`      - timeLocks: withdrawal=${10}s, cancellation=${101}s`)
-            console.log(`      - amount: ${parseUnits('99', 6)} USDC`)
-            console.log(`      - recipient: user's Sui address`)
 
             // Phase 3: WITHDRAWAL - Secret Revelation
-            console.log('\n🔓 Phase 3: WITHDRAWAL - Secret Revelation')
-
-            // Simulate time passing (finality lock)
-            console.log('⏰ Waiting for finality lock to pass...')
-
-            // User reveals secret after validating destination escrow
-            console.log('🔑 User revealing secret after validating Sui escrow...')
-
-            // Submit secret to F+ Relayer API
-            console.log('📤 Secret submitted to F+ Relayer API')
-
-            // Check for ready-to-accept secret fills
             const readyFills = await apiClient.getReadyToAcceptSecretFills(order.orderHash || order.orderId)
-            console.log('✅ Ready fills checked:', readyFills)
 
             // Execute withdrawal on Sui using revealed secret
-            console.log('🔧 Executing withdrawal on Sui using revealed secret...')
-            
-            // First, create a Sui escrow (simulate the destination escrow creation)
-            console.log('🏗️ Creating Sui escrow for withdrawal test...')
             const suiEscrowResult = await orderManager.executeSuiSwap(
                 parseUnits('99', 6), // 99 USDC equivalent in SUI
                 secret,
                 userAddress // recipient address
             )
-            console.log('✅ Sui escrow created:', suiEscrowResult.escrowId)
             
-            // Now withdraw from the Sui escrow using the secret
-            console.log('🔓 Withdrawing from Sui escrow using secret...')
             const suiWithdrawalResult = await orderManager.completeSwap(
                 ethResult.escrowAddress,
                 suiEscrowResult.escrowId,
                 secret,
                 suiEscrowResult.initVersion // Pass the initVersion from escrow creation
             )
-            console.log('✅ Sui withdrawal completed:', suiWithdrawalResult.suiWithdrawal?.txDigest)
-            console.log('🔑 Secret revealed:', suiWithdrawalResult.secretRevealed)
 
             // Phase 4: RECOVERY - Resolver Claims
-            console.log('\n🔄 Phase 4: RECOVERY - Resolver Claims')
-
-            // Resolver withdraws from Ethereum escrow using revealed secret
-            console.log('🔧 Resolver withdrawing from Ethereum escrow using revealed secret...')
-            console.log('💰 Resolver receives 100 USDC on Ethereum')
-            console.log('✅ Cross-chain atomic swap completed successfully!')
-
-            // Verify final state
-            console.log('\n📊 Final State Verification:')
-            console.log('   ✅ User: -100 USDC (Ethereum) +99 USDC (Sui)')
-            console.log('   ✅ Resolver: +100 USDC (Ethereum) -99 USDC (Sui)')
-            console.log('   ✅ Secret revealed and used for both withdrawals')
-            console.log('   ✅ Atomic swap guarantee maintained')
-
             // Test assertions
             expect(order).toBeDefined()
             expect(quote).toBeDefined()
@@ -1018,43 +814,6 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         }, 30000)
 
         it('should demonstrate Sui integration points', async () => {
-            console.log('\n🔗 Demonstrating Sui integration points...')
-
-            console.log('📝 Required Sui client setup:')
-            console.log('   1. Initialize Sui client with testnet RPC: https://fullnode.testnet.sui.io:443')
-            console.log('   2. Set up Ed25519Keypair for transaction signing')
-            console.log('   3. Configure gas budget (recommended: 10_000_000 MIST)')
-            console.log('   4. Handle Sui address format (0x... with 32 bytes)')
-            console.log('   Example: const suiClient = new SuiClient({ url: getFullnodeUrl("testnet") });')
-
-            console.log('\n🔧 Integration tasks:')
-            console.log('   - [ ] Add @mysten/sui.js dependency')
-            console.log('   - [ ] Create SuiResolver class similar to EthereumResolver')
-            console.log('   - [ ] Deploy escrow.move package to Sui testnet')
-            console.log('   - [ ] Implement Move functions: create_escrow, withdraw_with_secret, cancel_after_timeout')
-            console.log('   - [ ] Handle Sui coin types (0x2::sui::SUI, custom USDC type)')
-            console.log('   - [ ] Use TransactionBlock for complex operations')
-            console.log('   - [ ] Parse events for escrow creation/withdrawal')
-
-            console.log('\n🌉 Cross-chain coordination:')
-            console.log('   - [ ] Monitor Ethereum events for escrow deployment')
-            console.log('   - [ ] Deploy corresponding Sui escrow with matching parameters')
-            console.log('   - [ ] Synchronize secret revelation across chains')
-            console.log('   - [ ] Handle chain reorganizations and finality differences')
-            console.log('   - [ ] Implement timeout-based recovery mechanisms')
-            console.log('   - [ ] Extend F+ APIs to accept Sui addresses (bech32 format)')
-
-            console.log('\n📦 Move Package Structure:')
-            console.log('   module escrow {')
-            console.log('     struct Escrow has key, store {')
-            console.log('       id: UID,')
-            console.log('       hashlock: vector<u8>,')
-            console.log('       timelock: u64,')
-            console.log('       amount: Balance<COIN>,')
-            console.log('       recipient: address')
-            console.log('     }')
-            console.log('   }')
-
             // This test always passes as it's just documentation
             expect(true).toBe(true)
         }, 5000)

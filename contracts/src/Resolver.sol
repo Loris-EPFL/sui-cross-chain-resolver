@@ -72,7 +72,7 @@ contract Resolver is Ownable {
      * @notice See {IResolverExample-deployDst}.
      */
     function deployDst(IBaseEscrow.Immutables calldata dstImmutables, uint256 srcCancellationTimestamp) external onlyOwner payable {
-        _FACTORY.createDstEscrow{value: msg.value}(dstImmutables, srcCancellationTimestamp);
+        _FACTORY. {value: msg.value}(dstImmutables, srcCancellationTimestamp);
     }
 
     function withdraw(IEscrow escrow, bytes32 secret, IBaseEscrow.Immutables calldata immutables) external {

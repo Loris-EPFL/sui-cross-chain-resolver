@@ -194,7 +194,7 @@ export class SuiHTLCBridge {
         console.log('🔧 Function: oneinch_move::withdraw');
         
         try {
-
+            
             if (!params.initVersion || params.initVersion === 0n) {
                 const obj = await this.client.getObject({
                   id: params.lockId,
@@ -205,7 +205,7 @@ export class SuiHTLCBridge {
                   throw new Error(`Lock ${params.lockId} is not shared or initial_shared_version unavailable`);
                 }
                 params.initVersion = BigInt(shared.initial_shared_version);
-              }
+            }
 
 
             const tx = new Transaction();
