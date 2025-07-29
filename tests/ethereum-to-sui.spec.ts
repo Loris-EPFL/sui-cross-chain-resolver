@@ -2,6 +2,7 @@ import {describe, it, expect, beforeAll, afterAll} from '@jest/globals'
 import {createWalletClient, createPublicClient, http, parseUnits, keccak256, toHex, erc20Abi, parseSignature} from 'viem'
 import {privateKeyToAccount} from 'viem/accounts'
 import {sepolia} from 'viem/chains'
+import {sha256} from 'viem/utils'
 import {SuiClient, getFullnodeUrl} from '@mysten/sui/client'
 import { Transaction } from "@mysten/sui/transactions";
 import {Ed25519Keypair} from '@mysten/sui/keypairs/ed25519'
@@ -474,7 +475,7 @@ class CrossChainOrderManager {
         try {
             console.log('⚡ Executing Sui side of swap...')
 
-            const hashLock = keccak256(toHex(secret))
+            const hashLock = sha256(toHex(secret))
             
             // Create HTLC lock object on Sui
             const lockParams = {
@@ -483,9 +484,9 @@ class CrossChainOrderManager {
                 recipient: recipient,
                 refund: this.suiResolver.getAddress(),
                 withdrawalMs: 10, // 10 ms
-                publicWithdrawalMs: 1200000, // 20 minutes
-                cancellationMs: 1800000, // 30 minutes
-                publicCancellationMs: 2400000, // 40 minutes
+                publicWithdrawalMs: 120000, // 20 minutes
+                cancellationMs: 180000, // 30 minutes
+                publicCancellationMs: 240000, // 40 minutes
                 secretLength: secret.length,
                 safetyDeposit: '100000' // 0.1 SUI in MIST
             }
