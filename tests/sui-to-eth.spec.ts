@@ -7,10 +7,12 @@ import { SuiHTLCBridge } from './sui-contract-bridge';
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
+import { maxUint256 } from 'viem';
 
 // ABI for your Resolver & Factory
 import ResolverArtifact from '../contracts/out/Resolver.sol/Resolver.json';
 import TestEscrowFactoryArtifact from '../contracts/out/TestEscrowFactory.sol/TestEscrowFactory.json';
+import { UINT_256_MAX } from '@1inch/byte-utils';
 const RESOLVER_ABI = ResolverArtifact.abi;
 const FACTORY_ABI = TestEscrowFactoryArtifact.abi;
 
@@ -92,7 +94,7 @@ class EthereumResolver {
         abi: RESOLVER_ABI,
         functionName: 'deployDst',
         args: [immutables, srcCancellationTimestamp],
-        value: safetyDeposit ?? 0n,
+        value: safetyDeposit || 0n,
       });
 
       await this.publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -176,6 +178,33 @@ class EthereumResolver {
     } catch (e) {
       console.warn('Could not read addressOfEscrowDst from factory; returning zero address.');
       return `0x${''.padEnd(40, '0')}`;
+    }
+  }
+
+  async getTokenBalance(tokenAddress: `0x${string}`): Promise<bigint> {
+    const USDC_ABI = [
+      {
+        "constant": true,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "payable": false,
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ] as const;
+    
+    try {
+      const balance = await this.publicClient.readContract({
+        address: tokenAddress,
+        abi: USDC_ABI,
+        functionName: 'balanceOf',
+        args: [this.account.address],
+      }) as bigint;
+      return balance;
+    } catch (error) {
+      console.error('Error getting token balance:', error);
+      return 0n;
     }
   }
 }
@@ -275,7 +304,24 @@ async executeEthereumEscrowAfterSui(params: {
       timelocks: packedTimelocks,
     };
   
-    // ✅ 1) Approve USDC for the FACTORY to pull the amount via transferFrom(...)
+    // ✅ 1) Check balances and approve USDC for the Limit Order Protocol
+    const limitOrderProtocolAddr = TEST_CONFIG.ethereum.limitOrderProtocol as `0x${string}`;
+    
+    // Check ETH balance for safety deposit
+    const ethBalance = await this.ethResolver.getPublicClient().getBalance({
+      address: this.ethResolver.getAddress()
+    });
+    console.log(`💰 User ETH balance: ${ethBalance.toString()}`);
+    console.log(`💸 Required safety deposit: ${immutables.safetyDeposit.toString()}`);
+    
+    if (ethBalance < immutables.safetyDeposit) {
+      throw new Error(`Insufficient ETH for safety deposit. Have: ${ethBalance.toString()}, Need: ${immutables.safetyDeposit.toString()}`);
+    }
+    
+    // Approve USDC for Limit Order Protocol (following main.spec.ts pattern)
+    await this.approveUSDCToLimitOrderProtocol(limitOrderProtocolAddr, token, amountEth);
+    
+    // Also approve USDC for Factory (needed for dst escrow deployment)
     const factoryAddr = TEST_CONFIG.ethereum.escrowFactory as `0x${string}`;
     await this.approveUSDCToFactory(factoryAddr, token, amountEth);
   
@@ -294,10 +340,10 @@ async executeEthereumEscrowAfterSui(params: {
   }
   
   /**
-   * Approve USDC allowance to FACTORY (resolver-funded Dst escrow requires ERC-20 pull)
+   * Approve USDC allowance to Limit Order Protocol (following main.spec.ts pattern)
    */
-  private async approveUSDCToFactory(
-    factoryAddress: `0x${string}`,
+  private async approveUSDCToLimitOrderProtocol(
+    limitOrderProtocolAddress: `0x${string}`,
     token: `0x${string}`,
     amount: bigint
   ) {
@@ -313,18 +359,88 @@ async executeEthereumEscrowAfterSui(params: {
         "payable": false,
         "stateMutability": "nonpayable",
         "type": "function"
+      },
+      {
+        "constant": true,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "", "type": "uint256"}],
+        "payable": false,
+        "stateMutability": "view",
+        "type": "function"
       }
     ] as const;
-  
+    
+    // Check USDC balance first
+    const userAddress = this.ethResolver.getAddress();
+    const balance = await this.ethResolver.getPublicClient().readContract({
+      address: token,
+      abi: USDC_ABI,
+      functionName: 'balanceOf',
+      args: [userAddress],
+    }) as bigint;
+    
+    console.log(`💰 User USDC balance: ${balance.toString()}`);
+    console.log(`💸 Required amount: ${amount.toString()}`);
+    
+    if (balance < amount) {
+      throw new Error(`Insufficient USDC balance. Have: ${balance.toString()}, Need: ${amount.toString()}`);
+    }
+    
     const txHash = await this.ethResolver.getWalletClient().writeContract({
       address: token,
       abi: USDC_ABI,
       functionName: 'approve',
-      args: [factoryAddress, amount],
+      args: [limitOrderProtocolAddress, maxUint256],
     });
-  
+    
     await this.ethResolver.getPublicClient().waitForTransactionReceipt({ hash: txHash });
-    console.log(`✅ USDC approved for factory: ${factoryAddress}, amount: ${amount.toString()}`);
+    console.log(`✅ USDC approved for Limit Order Protocol: ${limitOrderProtocolAddress}, amount: ${amount.toString()}`);
+    console.log(`${txHash}`);
+  }
+
+  /**
+   * Approve USDC allowance to Factory (needed for dst escrow deployment)
+   */
+  private async approveUSDCToFactory(
+    factoryAddress: `0x${string}`,
+    token: `0x${string}`,
+    amount: bigint
+  ) {
+    const USDC_ABI = [
+        {
+          "constant": false,
+          "inputs": [
+            {"name": "_spender", "type": "address"},
+            {"name": "_value", "type": "uint256"}
+          ],
+          "name": "approve",
+          "outputs": [{"name": "", "type": "bool"}],
+          "payable": false,
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "constant": true,
+          "inputs": [{"name": "_owner", "type": "address"}],
+          "name": "balanceOf",
+          "outputs": [{"name": "", "type": "uint256"}],
+          "payable": false,
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ] as const;
+    
+    const txHash = await this.ethResolver.getWalletClient().writeContract({
+      address: token,
+      abi: USDC_ABI,
+      functionName: 'approve',
+      args: [factoryAddress, maxUint256],
+    });
+    
+    await this.ethResolver.getPublicClient().waitForTransactionReceipt({ hash: txHash });
+    console.log(`✅ USDC approved for Factory: ${factoryAddress}, amount: ${amount.toString()}`);
+    console.log(`${txHash}`);
   }
 
   /**
@@ -385,6 +501,22 @@ describe('Sui → Ethereum Flow (Sui lock first, then ETH escrow)', () => {
   it('should execute Sui → Ethereum full flow: Sui lock → ETH escrow → Sui withdraw → ETH withdraw', async () => {
     const srcAmountSui = parseUnits('99', TEST_CONFIG.sui.tokens.USDC.decimals);
     const dstAmountEth = parseUnits('100', TEST_CONFIG.ethereum.tokens.USDC.decimals);
+
+    // Check initial balances
+    const initialUsdcBalance = await ethResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address);
+    const initialEthBalance = await ethResolver.getPublicClient().getBalance({
+      address: ethResolver.getAddress()
+    });
+    
+    console.log(`💰 Initial USDC balance: ${initialUsdcBalance.toString()}`);
+    console.log(`💰 Initial ETH balance: ${initialEthBalance.toString()}`);
+    console.log(`💸 Required USDC amount: ${dstAmountEth.toString()}`);
+    console.log(`💸 Required ETH safety deposit: ${1000000000000000n.toString()}`);
+    
+    // Check if user has enough USDC
+    if (initialUsdcBalance < dstAmountEth) {
+      throw new Error(`Insufficient USDC balance. Have: ${initialUsdcBalance.toString()}, Need: ${dstAmountEth.toString()}. Please get test USDC from a faucet.`);
+    }
 
     const secret = `0x${Buffer.from(Array(32).fill(7)).toString('hex')}`;
     const secretHash = keccak256(toHex(secret));
