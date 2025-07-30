@@ -85,6 +85,9 @@ export class Wallet {
     public async signOrder(srcChainId: number, order: Sdk.CrossChainOrder): Promise<string> {
         const typedData = order.getTypedData(srcChainId)
 
+        console.log('typedData', typedData)
+        console.log('typedData domain', typedData.domain)
+
         return this.signer.signTypedData(
             typedData.domain,
             {Order: typedData.types[typedData.primaryType]},
