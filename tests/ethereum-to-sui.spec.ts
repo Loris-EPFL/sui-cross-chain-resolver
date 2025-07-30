@@ -387,7 +387,7 @@ class CrossChainOrderManager {
                         initialRateBump: 0,
                         points: [],
                         duration: 120n,
-                        startTime: 1n
+                        startTime: BigInt(Math.floor(Date.now() / 1000)) // Current timestamp
                     }),
                     whitelist: [
                         {
@@ -412,6 +412,15 @@ class CrossChainOrderManager {
                 .setExtension(order.extension)
                 .setAmountMode(Sdk.AmountMode.maker)
                 .setAmountThreshold(order.takingAmount)
+
+            // Approve token spending before deploying escrow
+            console.log('🔧 Approving token spending for resolver contract')
+            await this.ethereumResolver.approveToken(
+                order.makerAsset.toString() as `0x${string}`,
+                this.ethereumResolver.getResolverAddress() as `0x${string}`,
+                amount
+            )
+            console.log('✅ Token approval completed')
 
             const result = await this.ethereumResolver.deploySrc(
                  11155111, // Use actual Sepolia chain ID for deployment
