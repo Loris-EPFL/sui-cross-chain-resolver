@@ -13,7 +13,7 @@ import {WrappedTokenMock} from "limit-order-protocol/contracts/mocks/WrappedToke
 // Import our contracts
 import {TestEscrowFactory} from "../src/TestEscrowFactory.sol";
 import {Resolver} from "../src/Resolver.sol";
-import {ERC20True} from "../src/ERC20True.sol";
+import {ERC20True} from "../lib/limit-order-protocol/contracts/ERC20True.sol";
 
 /**
  * @title Deployment Script for Cross-Chain Resolver Contracts
@@ -82,6 +82,11 @@ contract DeployScript is Script {
         console.log("\n=== Deploying Mock USDC ====");
         TokenMock mockUSDC = new TokenMock("USD Coin", "USDC");
         console.log("Mock USDC deployed at:", address(mockUSDC));
+
+        //Step 2.1: Deploy ERC20True
+        console.log("\n=== Deploying ERC20True ====");
+        ERC20True erc20True = new ERC20True();
+        console.log("ERC20True deployed at:", address(erc20True));
         
         // Step 2.5: Deploy ERC20True token for 1inch compatibility
         console.log("\n=== Deploying ERC20True Token ====");

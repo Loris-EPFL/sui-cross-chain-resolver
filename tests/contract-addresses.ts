@@ -12,11 +12,13 @@ export const CONTRACT_ADDRESSES = {
             'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e',
 
         // Deployed contract addresses from terminal output
+
         resolver: '0xfd1E34f7859FB8b758BcE4ba4fbf1891664960bE' as `0x${string}`,
         escrowFactory: '0x1948eFaf98abF2C7Df95e7Df4A1618F8F202D28a' as `0x${string}`,
         escrowSrcImpl: '0x6B17E6fDdc8752919aF841E852fcB1A31F59Fbe9' as `0x${string}`,
         escrowDstImpl: '0x6D124e34Edc81216F60b710C87F9b1cF138679Ad' as `0x${string}`,
         limitOrderProtocol: '0xd896FD11857400DDfD92A0824f6108e875670f3f' as `0x${string}`,
+
 
         // Token addresses
         tokens: {
@@ -26,7 +28,12 @@ export const CONTRACT_ADDRESSES = {
             },
             USDC: {
                 address: '0xe4405318d9b679A4309323F84b9e59560d78CC23' as `0x${string}`,
+
                 decimals: 6
+            },
+            WETH: {
+                address: '0x4121CC48aB1cf23C63ACbDC6Da317c392de86F3D' as `0x${string}`,
+                decimals: 18
             }
         }
     },
