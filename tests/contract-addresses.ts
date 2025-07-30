@@ -6,22 +6,26 @@
 export const CONTRACT_ADDRESSES = {
     // Ethereum Sepolia testnet
     sepolia: {
-        chainId: 11155111, // Sepolia testnet
+        chainId: 1,//11155111, // Sepolia testnet
         rpcUrl:
             process.env.SEPOLIA_RPC_URL ||
             'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e',
 
         // Deployed contract addresses from terminal output
-        resolver: '0xa0dbb0cCaD76911Aa8492005b40376D6607987e0' as `0x${string}`,
-        escrowFactory: '0xc58D3Bc2cf95D931e6d157f65d2f227616eC5E69' as `0x${string}`,
-        escrowSrcImpl: '0x2eB575147904e52E2986B103Cd36E80cf87c460C' as `0x${string}`,
-        escrowDstImpl: '0x35b20edf68C415B9A5fC84eacFFA2c33cb808235' as `0x${string}`,
-        limitOrderProtocol: '0x977D9ac3C49eB58561b254436fE67E26863342Aa' as `0x${string}`,
+        resolver: '0xfd1E34f7859FB8b758BcE4ba4fbf1891664960bE' as `0x${string}`,
+        escrowFactory: '0x1948eFaf98abF2C7Df95e7Df4A1618F8F202D28a' as `0x${string}`,
+        escrowSrcImpl: '0x6B17E6fDdc8752919aF841E852fcB1A31F59Fbe9' as `0x${string}`,
+        escrowDstImpl: '0x6D124e34Edc81216F60b710C87F9b1cF138679Ad' as `0x${string}`,
+        limitOrderProtocol: '0xd896FD11857400DDfD92A0824f6108e875670f3f' as `0x${string}`,
 
         // Token addresses
         tokens: {
+            ERC20True: {
+                address: '0x96e2979a7C49Dd827DDD0e6eD0BC26a75825d5cc' as `0x${string}`,
+                decimals: 18
+            },
             USDC: {
-                address: '0xAF0Ea4eaCfe376D49E7CEDCAa678a575fd8beE8d' as `0x${string}`,
+                address: '0xe4405318d9b679A4309323F84b9e59560d78CC23' as `0x${string}`,
                 decimals: 6
             }
         }
@@ -40,6 +44,10 @@ export const CONTRACT_ADDRESSES = {
         limitOrderProtocol: '' as `0x${string}`,
 
         tokens: {
+            ERC20True: {
+                address: '0xA0b86a33E6441E6C7D3E4C7C5C6C7C5C6C7C5C6C' as `0x${string}`, // Example
+                decimals: 18
+            },
             USDC: {
                 address: '0xA0b86a33E6441E6C7D3E4C7C5C6C7C5C6C7C5C6C' as `0x${string}`, // Example
                 decimals: 6
@@ -59,6 +67,11 @@ export const CONTRACT_ADDRESSES = {
         escrowDstImpl: '0xd4ff0fe03c9f70db9693ad1415d0c193ad3906494428cf252621037bd7117e32',
 
         tokens: {
+            ERC20True: {
+                // Sui ERC20True token address (example format)
+                address: '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::erc20_true::ERC20True',
+                decimals: 18
+            },
             USDC: {
                 // Sui USDC coin type (Move type identifier)
                 address: '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC',

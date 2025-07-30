@@ -13,6 +13,7 @@ import {WrappedTokenMock} from "limit-order-protocol/contracts/mocks/WrappedToke
 // Import our contracts
 import {TestEscrowFactory} from "../src/TestEscrowFactory.sol";
 import {Resolver} from "../src/Resolver.sol";
+import {ERC20True} from "../src/ERC20True.sol";
 
 /**
  * @title Deployment Script for Cross-Chain Resolver Contracts
@@ -82,6 +83,11 @@ contract DeployScript is Script {
         TokenMock mockUSDC = new TokenMock("USD Coin", "USDC");
         console.log("Mock USDC deployed at:", address(mockUSDC));
         
+        // Step 2.5: Deploy ERC20True token for 1inch compatibility
+        console.log("\n=== Deploying ERC20True Token ====");
+        ERC20True erc20True = new ERC20True();
+        console.log("ERC20True deployed at:", address(erc20True));
+        
         // Step 3: Deploy Mock Limit Order Protocol
         console.log("\n=== Deploying Mock Limit Order Protocol ====");
         LimitOrderProtocol mockLOP = new LimitOrderProtocol(mockWETH);
@@ -129,7 +135,7 @@ contract DeployScript is Script {
         console.log("\n=== Setting up test token balances ====");
         
         // Mint some USDC to deployer for testing
-        mockUSDC.mint(deployer, 1000000 * 10**6); // 1M USDC (6 decimals)
+        mockUSDC.mint(deployer, 1000000 * 10**18); // 1M USDC (6 decimals)
         console.log("Minted 1,000,000 USDC to deployer");
         
         // Deposit some ETH to get WETH for testing
@@ -144,6 +150,7 @@ contract DeployScript is Script {
         console.log("Deployer:", deployer);
         console.log("Mock WETH:", address(mockWETH));
         console.log("Mock USDC:", address(mockUSDC));
+        console.log("ERC20True:", address(erc20True));
         console.log("Mock LimitOrderProtocol:", address(mockLOP));
         console.log("TestEscrowFactory:", address(escrowFactory));
         console.log("Resolver:", address(resolver));
@@ -159,6 +166,7 @@ contract DeployScript is Script {
             "# Deployment Addresses\n",
             "MOCK_WETH=", vm.toString(address(mockWETH)), "\n",
             "MOCK_USDC=", vm.toString(address(mockUSDC)), "\n",
+            "ERC20_TRUE=", vm.toString(address(erc20True)), "\n",
             "MOCK_LIMIT_ORDER_PROTOCOL=", vm.toString(address(mockLOP)), "\n",
             "ESCROW_FACTORY=", vm.toString(address(escrowFactory)), "\n",
             "RESOLVER=", vm.toString(address(resolver)), "\n",
