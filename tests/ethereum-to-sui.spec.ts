@@ -190,24 +190,38 @@ class EthereumResolver {
             console.log('  resolverAddress:', this.resolverAddress)
             
             // Use the Resolver class to construct the withdrawal transaction
-             const resolver = new Resolver(this.resolverAddress, this.resolverAddress)
-             // Get immutables from the order for withdrawal
-             const immutables = order.toSrcImmutables(Sdk.NetworkEnum.ETHEREUM, new Sdk.Address(this.resolverAddress), order.makingAmount, order.escrowExtension.hashLockInfo)
-             
-             console.log('  immutables:', immutables)
-             console.log('  order.maker:', order.maker.toString())
-             console.log('  order.makerAsset:', order.makerAsset.toString())
-             
-             const txRequest = resolver.withdraw('src', new Sdk.Address(escrowAddress), secret, immutables)
+            const resolver = new Resolver(this.resolverAddress, this.resolverAddress)
+            // Get immutables from the order for withdrawal
+            const immutables = order.toSrcImmutables(Sdk.NetworkEnum.ETHEREUM, new Sdk.Address(this.resolverAddress), order.makingAmount, order.escrowExtension.hashLockInfo)
+            
+            console.log('  immutables:', immutables.build())
+            console.log('  order.maker:', order.maker.toString())
+            console.log('  order.makerAsset:', order.makerAsset.toString())
+            
+            const txRequest = resolver.withdraw('src', new Sdk.Address(escrowAddress), secret, immutables)
 
-            // Execute the transaction using viem
-            const hash = await this.walletClient.sendTransaction({
-                to: txRequest.to as `0x${string}`,
-                data: txRequest.data as `0x${string}`,
-                value: txRequest.value || 0n
+            // Execute the transaction using viem writeContract
+            const hash = await this.walletClient.writeContract({
+                address: this.resolverAddress as `0x${string}`,
+                abi: RESOLVER_ABI,
+                functionName: 'withdraw',
+                args: [
+                    escrowAddress as `0x${string}`,
+                    secret as `0x${string}`,
+                    immutables.build()
+                ],
+                gas: 200000n,
+                gasPrice: parseUnits('20', 9) // 20 gwei gas price
             })
 
-            const receipt = await this.publicClient.waitForTransactionReceipt({hash})
+            console.log('  Withdraw transaction hash:', hash)
+
+            const receipt = await this.publicClient.waitForTransactionReceipt({
+                hash,
+                timeout: 300000 // 5 minutes
+            })
+
+            console.log('  Withdraw transaction confirmed')
 
             return {
                 txHash: hash,
