@@ -71,6 +71,9 @@ class EthereumResolver {
         // Create viem account from private key
         this.account = privateKeyToAccount(privateKey as `0x${string}`)
 
+        // Get RPC URL from environment or use default
+        const rpcUrl = process.env.SEPOLIA_RPC_URL || 'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e'
+        
         // Create wallet client with sepolia
         this.walletClient = createWalletClient({
             account: this.account,
@@ -97,7 +100,7 @@ class EthereumResolver {
         signature: string,
         takerTraits: Sdk.TakerTraits,
         amount: bigint
-    ): Promise<{txHash: string; blockHash: string}> {
+    ): Promise<{txHash: string; blockHash: string; immutables: any}> {
         try {
             // Use the Resolver class to construct the transaction request
             const resolver = new Resolver(this.resolverAddress, this.resolverAddress)
@@ -144,7 +147,8 @@ class EthereumResolver {
 
             return {
                 txHash: hash,
-                blockHash: receipt.blockHash
+                blockHash: receipt.blockHash,
+                immutables: immutables.build()
             }
         } catch (error) {
             console.error('Error in deploySrc:', error)
@@ -174,10 +178,20 @@ class EthereumResolver {
      */
     async withdraw(escrowAddress: `0x${string}`, secret: string, order: Sdk.CrossChainOrder) {
         try {
+            console.log('🔍 Withdraw parameters:')
+            console.log('  escrowAddress:', escrowAddress, 'type:', typeof escrowAddress, 'length:', escrowAddress.length)
+            console.log('  secret:', secret, 'type:', typeof secret, 'length:', secret.length)
+            console.log('  resolverAddress:', this.resolverAddress)
+            
             // Use the Resolver class to construct the withdrawal transaction
              const resolver = new Resolver(this.resolverAddress, this.resolverAddress)
              // Get immutables from the order for withdrawal
              const immutables = order.toSrcImmutables(Sdk.NetworkEnum.ETHEREUM, new Sdk.Address(this.resolverAddress), order.makingAmount, order.escrowExtension.hashLockInfo)
+             
+             console.log('  immutables:', immutables)
+             console.log('  order.maker:', order.maker.toString())
+             console.log('  order.makerAsset:', order.makerAsset.toString())
+             
              const txRequest = resolver.withdraw('src', new Sdk.Address(escrowAddress), secret, immutables)
 
             // Execute the transaction using viem
@@ -424,7 +438,7 @@ class CrossChainOrderManager {
             )
             console.log('✅ Token approval completed')
 
-            const result = await this.ethereumResolver.deploySrc(
+            const {txHash, blockHash, immutables} = await this.ethereumResolver.deploySrc(
                  1, // Use actual Sepolia chain ID for deployment
                  order,
                  signature,
@@ -434,9 +448,12 @@ class CrossChainOrderManager {
 
             console.log('✅ Deployed source escrow successfully')
 
+            // Get the escrow address using the immutables with deployedAt timestamp
+            const escrowAddress = await this.ethereumResolver.getEscrowAddress(immutables)
+            console.log(`📍 Computed escrow address: ${escrowAddress}`)
             return {
-                txHash: result.txHash,
-                escrowAddress: '', // Will be computed from events
+                txHash: txHash,
+                escrowAddress: escrowAddress,
                 order
             }
         } catch (error) {
@@ -451,11 +468,32 @@ class CrossChainOrderManager {
     async executeSuiSwap(amount: bigint, secret: string, recipient: string): Promise<{ escrowId: string; txHash: string; initVersion: bigint }> {
         try {
             const hashLock = sha256(toHex(secret))
+            // Convert amount from Ethereum token units to Sui MIST
+            // Ethereum tokens typically use 18 decimals, SUI uses 9 decimals (MIST)
+            // So we need to convert: amount (in wei/18 decimals) -> SUI (9 decimals) -> MIST
+            let suiAmount: string
+            
+            //TODO : The amount is actually given by the user in the order? 
+            if (amount > 0n) {
+                // Convert from 18 decimal token to 9 decimal SUI, then to MIST
+                // Example: 99000000000000000000 wei (99 tokens) -> 99000000000 MIST (99 SUI)
+                const suiTokenAmount = amount / 1000000000n // Convert from 18 to 9 decimals
+                suiAmount = suiTokenAmount.toString()
+            } else {
+                suiAmount = amount.toString()
+            }
+            
+            console.log(`💱 Converting amount from ETH units to SUI MIST:`)
+            console.log(`  Original amount (wei): ${amount.toString()}`)
+            console.log(`  Converted to MIST: ${suiAmount}`)
+
+
+            const hardcodeAmount = 100000000;
             
             // Create HTLC lock object on Sui
             const lockParams = {
                 hashLock: hashLock,
-                amount: amount.toString(),
+                amount: hardcodeAmount.toString(),
                 recipient: recipient,
                 refund: this.suiResolver.getAddress(),
                 withdrawalMs: 10, // 10 ms
@@ -465,7 +503,6 @@ class CrossChainOrderManager {
                 secretLength: secret.length,
                 safetyDeposit: '100000' // 0.1 SUI in MIST
             }
-
             const result = await this.suiResolver.createLockObject(lockParams)
 
             if (!result.success || !result.lockId) {

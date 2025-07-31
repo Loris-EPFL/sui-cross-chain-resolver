@@ -97,7 +97,10 @@ class EthereumResolver {
         value: safetyDeposit || 0n,
       });
 
-      await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+      await this.publicClient.waitForTransactionReceipt({ 
+        hash: txHash,
+        timeout: 60_000 // 60 seconds timeout for contract deployment
+      });
 
       // EscrowDst is created by the factory, not the resolver; we return txHash only.
       // Escrow address will be computed via factory call.
@@ -144,7 +147,10 @@ class EthereumResolver {
       functionName: 'withdraw',
       args: [escrowAddress, secret, immutables],
     });
-    const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ 
+      hash: txHash,
+      timeout: 30_000 // 30 seconds timeout
+    });
     return { txHash, receipt };
   }
 
@@ -158,7 +164,10 @@ class EthereumResolver {
       functionName: 'cancel',
       args: [escrowAddress, immutables],
     });
-    const receipt = await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ 
+      hash: txHash,
+      timeout: 30_000 // 30 seconds timeout
+    });
     return { txHash, receipt };
   }
 
@@ -394,7 +403,10 @@ async executeEthereumEscrowAfterSui(params: {
       args: [limitOrderProtocolAddress, maxUint256],
     });
     
-    await this.ethResolver.getPublicClient().waitForTransactionReceipt({ hash: txHash });
+    await this.ethResolver.getPublicClient().waitForTransactionReceipt({ 
+      hash: txHash,
+      timeout: 30_000 // 30 seconds timeout
+    });
     console.log(`✅ USDC approved for Limit Order Protocol: ${limitOrderProtocolAddress}, amount: ${amount.toString()}`);
     console.log(`${txHash}`);
   }
@@ -438,7 +450,10 @@ async executeEthereumEscrowAfterSui(params: {
       args: [factoryAddress, maxUint256],
     });
     
-    await this.ethResolver.getPublicClient().waitForTransactionReceipt({ hash: txHash });
+    await this.ethResolver.getPublicClient().waitForTransactionReceipt({ 
+      hash: txHash,
+      timeout: 30_000 // 30 seconds timeout
+    });
     console.log(`✅ USDC approved for Factory: ${factoryAddress}, amount: ${amount.toString()}`);
     console.log(`${txHash}`);
   }
