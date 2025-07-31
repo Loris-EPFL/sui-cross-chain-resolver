@@ -27,7 +27,7 @@ export const config = {
             ownerPrivateKey: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
             tokens: {
                 USDC: {
-                    address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+                    address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb480',
                     donor: '0xd54F23BE482D9A58676590fCa79c8E43087f92fB'
                 }
             }
