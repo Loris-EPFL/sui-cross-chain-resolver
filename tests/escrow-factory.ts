@@ -1,14 +1,24 @@
 import {id, Interface, JsonRpcProvider} from 'ethers'
+import {createPublicClient, http, parseAbiItem, decodeEventLog, parseEventLogs} from 'viem'
+import {mainnet} from 'viem/chains'
 import Sdk from '@1inch/cross-chain-sdk'
 import EscrowFactoryContract from '../dist/contracts/EscrowFactory.sol/EscrowFactory.json'
 
 export class EscrowFactory {
     private iface = new Interface(EscrowFactoryContract.abi)
+    private viemClient: any
 
     constructor(
         private readonly provider: JsonRpcProvider,
         private readonly address: string
-    ) {}
+    ) {
+        // Create viem client with the same RPC URL as ethers provider
+        const rpcUrl = (provider as any)._getConnection().url
+        this.viemClient = createPublicClient({
+            chain: mainnet,
+            transport: http(rpcUrl)
+        })
+    }
 
     public async getSourceImpl(): Promise<Sdk.Address> {
         return Sdk.Address.fromBigInt(
@@ -33,35 +43,115 @@ export class EscrowFactory {
     }
 
     public async getSrcDeployEvent(blockHash: string): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
-        const event = this.iface.getEvent('SrcEscrowCreated')!
-        const logs = await this.provider.getLogs({
-            blockHash,
-            address: this.address,
-            topics: [event.topicHash]
+        // Get block details first to get the block number
+        const block = await this.viemClient.getBlock({ blockHash: blockHash as `0x${string}` })
+        
+        // Create event filter for the specific block range
+        const filter = await this.viemClient.createContractEventFilter({
+            abi: EscrowFactoryContract.abi,
+            address: this.address as `0x${string}`,
+            eventName: 'SrcEscrowCreated',
+            fromBlock: block.number,
+            toBlock: block.number
         })
 
-        const [data] = logs.map((l) => this.iface.decodeEventLog(event, l.data))
+        // Get filter logs
+        const logs = await this.viemClient.getFilterLogs({ filter })
+        return this.processSrcEscrowCreatedLogs(logs)
+    }
 
-        const immutables = data.at(0)
-        const complement = data.at(1)
+    public async getSrcDeployEventByBlockNumber(blockNumber: bigint): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
+        // Create event filter for the specific block number
+        const filter = await this.viemClient.createContractEventFilter({
+            abi: EscrowFactoryContract.abi,
+            address: this.address as `0x${string}`,
+            eventName: 'SrcEscrowCreated',
+            fromBlock: blockNumber,
+            toBlock: blockNumber
+        })
 
-        return [
-            Sdk.Immutables.new({
-                orderHash: immutables[0],
-                hashLock: Sdk.HashLock.fromString(immutables[1]),
-                maker: Sdk.Address.fromBigInt(immutables[2]),
-                taker: Sdk.Address.fromBigInt(immutables[3]),
-                token: Sdk.Address.fromBigInt(immutables[4]),
-                amount: immutables[5],
-                safetyDeposit: immutables[6],
-                timeLocks: Sdk.TimeLocks.fromBigInt(immutables[7])
-            }),
-            Sdk.DstImmutablesComplement.new({
-                maker: Sdk.Address.fromBigInt(complement[0]),
-                amount: complement[1],
-                token: Sdk.Address.fromBigInt(complement[2]),
-                safetyDeposit: complement[3]
+        // Get filter logs
+        const logs = await this.viemClient.getFilterLogs({ filter })
+        return this.processSrcEscrowCreatedLogs(logs)
+    }
+
+    public async getSrcDeployEventFromTxHash(txHash: string): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
+        console.log(`🔍 Getting transaction details: ${txHash}`)
+        
+        // First, check if the transaction exists
+        try {
+            const tx = await this.viemClient.getTransaction({ 
+                hash: txHash as `0x${string}`
             })
-        ]
+            console.log(`✅ Transaction found in block: ${tx.blockNumber || 'pending'}`)
+        } catch (error) {
+            console.error(`❌ Transaction not found: ${txHash}`, error)
+            throw new Error(`Transaction ${txHash} not found on the network`)
+        }
+        
+        // Try to get the transaction receipt directly (assuming it's already mined)
+        let receipt
+        try {
+            receipt = await this.viemClient.getTransactionReceipt({ 
+                hash: txHash as `0x${string}`
+            })
+            console.log(`✅ Transaction receipt found for block: ${receipt.blockNumber}`)
+        } catch (error) {
+            console.log(`⏳ Transaction not yet mined, waiting with extended timeout...`)
+            // If not found, wait for it to be mined with a very long timeout
+            receipt = await this.viemClient.waitForTransactionReceipt({ 
+                hash: txHash as `0x${string}`,
+                timeout: 300000 // 5 minutes for Sepolia's very slow block times
+            })
+            console.log(`✅ Transaction receipt received for block: ${receipt.blockNumber}`)
+        }
+        
+        console.log(`📝 Receipt has ${receipt.logs.length} logs`)
+        
+        // Parse events from the receipt logs
+        const events = parseEventLogs({
+            abi: EscrowFactoryContract.abi,
+            logs: receipt.logs,
+            eventName: 'SrcEscrowCreated'
+        })
+        
+        console.log(`🎯 Found ${events.length} SrcEscrowCreated events`)
+        
+        return this.processSrcEscrowCreatedLogs(events)
+    }
+
+    private processSrcEscrowCreatedLogs(logs: any[]): [Sdk.Immutables, Sdk.DstImmutablesComplement] {
+        if (logs.length === 0) {
+            throw new Error('No SrcEscrowCreated events found in block')
+        }
+
+        // Take the first log (assuming one deployment per block)
+        const log = logs[0]
+        
+        // For viem's createContractEventFilter, args should be directly accessible
+        const srcImmutables = log.args.srcImmutables
+        const dstImmutablesComplement = log.args.dstImmutablesComplement
+        
+        // Construct Sdk.Immutables from srcImmutables using proper SDK methods
+        const immutables = Sdk.Immutables.new({
+            orderHash: srcImmutables.orderHash,
+            hashLock: Sdk.HashLock.fromString(srcImmutables.hashlock),
+            maker: Sdk.Address.fromBigInt(srcImmutables.maker),
+            taker: Sdk.Address.fromBigInt(srcImmutables.taker),
+            token: Sdk.Address.fromBigInt(srcImmutables.token),
+            amount: srcImmutables.amount,
+            safetyDeposit: srcImmutables.safetyDeposit,
+            timeLocks: Sdk.TimeLocks.fromBigInt(srcImmutables.timelocks)
+        })
+
+        // Construct Sdk.DstImmutablesComplement from dstImmutablesComplement using proper SDK methods
+        const dstComplement = Sdk.DstImmutablesComplement.new({
+            maker: Sdk.Address.fromBigInt(dstImmutablesComplement.maker),
+            amount: dstImmutablesComplement.amount,
+            token: Sdk.Address.fromBigInt(dstImmutablesComplement.token),
+            safetyDeposit: dstImmutablesComplement.safetyDeposit
+        })
+
+        return [immutables, dstComplement]
     }
 }
