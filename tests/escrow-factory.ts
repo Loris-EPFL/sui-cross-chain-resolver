@@ -76,15 +76,36 @@ export class EscrowFactory {
     }
 
     public async getSrcDeployEventFromTxHash(txHash: string): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
-        console.log(`🔍 Waiting for transaction receipt: ${txHash}`)
+        console.log(`🔍 Getting transaction details: ${txHash}`)
         
-        // Wait for transaction to be mined and get receipt with increased timeout for Sepolia
-        const receipt = await this.viemClient.waitForTransactionReceipt({ 
-            hash: txHash as `0x${string}`,
-            timeout: 60000 // 60 seconds timeout for Sepolia's slow block times
-        })
+        // First, check if the transaction exists
+        try {
+            const tx = await this.viemClient.getTransaction({ 
+                hash: txHash as `0x${string}`
+            })
+            console.log(`✅ Transaction found in block: ${tx.blockNumber || 'pending'}`)
+        } catch (error) {
+            console.error(`❌ Transaction not found: ${txHash}`, error)
+            throw new Error(`Transaction ${txHash} not found on the network`)
+        }
         
-        console.log(`✅ Transaction receipt received for block: ${receipt.blockNumber}`)
+        // Try to get the transaction receipt directly (assuming it's already mined)
+        let receipt
+        try {
+            receipt = await this.viemClient.getTransactionReceipt({ 
+                hash: txHash as `0x${string}`
+            })
+            console.log(`✅ Transaction receipt found for block: ${receipt.blockNumber}`)
+        } catch (error) {
+            console.log(`⏳ Transaction not yet mined, waiting with extended timeout...`)
+            // If not found, wait for it to be mined with a very long timeout
+            receipt = await this.viemClient.waitForTransactionReceipt({ 
+                hash: txHash as `0x${string}`,
+                timeout: 300000 // 5 minutes for Sepolia's very slow block times
+            })
+            console.log(`✅ Transaction receipt received for block: ${receipt.blockNumber}`)
+        }
+        
         console.log(`📝 Receipt has ${receipt.logs.length} logs`)
         
         // Parse events from the receipt logs

@@ -137,11 +137,16 @@ class EthereumResolver {
                     trait,
                     args
                 ],
-                value: txRequest.value
+                value: txRequest.value,
+                gas: 500000n, // Set explicit gas limit
+                gasPrice: parseUnits('20', 9) // 20 gwei gas price for faster mining
             })
 
-            // Wait for transaction receipt
-            const receipt = await this.publicClient.waitForTransactionReceipt({hash})
+            // Wait for transaction receipt with extended timeout
+            const receipt = await this.publicClient.waitForTransactionReceipt({
+                hash,
+                timeout: 300000 // 5 minutes timeout
+            })
 
             console.log(`🔧 Deployed source escrow with amount: ${amount}`)
             console.log(`📍 Transaction hash: ${hash}`)
@@ -223,10 +228,15 @@ class EthereumResolver {
                 address: tokenAddress,
                 abi: erc20Abi,
                 functionName: 'approve',
-                args: [spenderAddress, amount]
+                args: [spenderAddress, amount],
+                gas: 100000n, // Set explicit gas limit
+                gasPrice: parseUnits('20', 9) // 20 gwei gas price for faster mining
             })
 
-            await this.publicClient.waitForTransactionReceipt({hash})
+            await this.publicClient.waitForTransactionReceipt({
+                hash,
+                timeout: 300000 // 5 minutes timeout
+            })
 
             return hash
         } catch (error) {
@@ -448,9 +458,16 @@ class CrossChainOrderManager {
              )
 
             console.log('✅ Deployed source escrow successfully at block', blockNumber)
+            console.log('📍 Transaction hash from deploySrc:', txHash)
+            
+            // Validate transaction hash format
+            if (!txHash || !txHash.startsWith('0x') || txHash.length !== 66) {
+                throw new Error(`Invalid transaction hash format: ${txHash}`)
+            }
 
             // Use EscrowFactory to get the srcEscrowEvent from transaction receipt
-            const provider = new JsonRpcProvider('https://g.w.lavanet.xyz:443/gateway/eth/rpc-http/d3630392db153e71701cd89c262c116e')
+            const rpcUrl = process.env.SEPOLIA_RPC_URL || 'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e'
+            const provider = new JsonRpcProvider(rpcUrl)
             const escrowFactory = new EscrowFactory(provider, this.ethereumResolver.getEscrowFactoryAddress())
             const srcEscrowEvent = await escrowFactory.getSrcDeployEventFromTxHash(txHash)
             
@@ -870,7 +887,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             } catch (error: any) {
                 console.log('ℹ️ Order creation error (expected in test environment):', error.message)
             }
-        }, 120000)
+        }, 360000) // 6 minutes timeout for Sepolia
 
         it('should simulate complete Fusion+ cross-chain swap flow (Ethereum Sepolia → Sui)', async () => {
             // Phase 1: ANNOUNCEMENT - Order Creation (using mock API)
@@ -988,7 +1005,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             expect(secretHash).toBeDefined()
             expect(readyFills).toBeDefined()
             expect(ethResult).toBeDefined()
-        }, 120000)
+        }, 360000) // 6 minutes timeout for Sepolia
 
         it('should demonstrate Sui integration points', async () => {
             // This test always passes as it's just documentation
