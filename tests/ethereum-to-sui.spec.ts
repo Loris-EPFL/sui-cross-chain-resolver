@@ -221,7 +221,43 @@ class EthereumResolver {
                 timeout: 300000 // 5 minutes
             })
 
-            console.log('  Withdraw transaction confirmed')
+            console.log('  📋 Transaction Receipt Details:')
+            console.log('    Status:', receipt.status)
+            console.log('    Block Number:', receipt.blockNumber)
+            console.log('    Gas Used:', receipt.gasUsed)
+            console.log('    Effective Gas Price:', receipt.effectiveGasPrice)
+            console.log('    Transaction Index:', receipt.transactionIndex)
+            console.log('    Logs Count:', receipt.logs.length)
+            
+            if (receipt.logs.length > 0) {
+                console.log('    📝 Transaction Logs:')
+                receipt.logs.forEach((log, index) => {
+                    console.log(`      Log ${index}:`, {
+                        address: log.address,
+                        topics: log.topics,
+                        data: log.data
+                    })
+                })
+            }
+            
+            if (receipt.status === 'reverted') {
+                console.error('  ❌ Transaction was reverted!')
+                // Try to get revert reason
+                try {
+                    const tx = await this.publicClient.getTransaction({ hash })
+                    console.log('    📄 Transaction Details:')
+                    console.log('      From:', tx.from)
+                    console.log('      To:', tx.to)
+                    console.log('      Value:', tx.value)
+                    console.log('      Gas:', tx.gas)
+                    console.log('      Gas Price:', tx.gasPrice)
+                    console.log('      Input Data:', tx.input)
+                } catch (txError) {
+                    console.error('    Failed to get transaction details:', txError)
+                }
+            } else {
+                console.log('  ✅ Withdraw transaction confirmed successfully')
+            }
 
             return {
                 txHash: hash,
@@ -404,8 +440,8 @@ class CrossChainOrderManager {
                     maker: new Sdk.Address(makerAddress),
                     makingAmount: amount,
                     takingAmount: amount,
-                    makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address),
-                    takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address)
+                    makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address),
+                    takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address)
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
@@ -647,8 +683,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
     describe('Complete Cross-Chain Flow', () => {
         it('should execute complete Ethereum to Sui swap flow', async () => {
-            const makingAmount = parseUnits('100', TEST_CONFIG.ethereum.tokens.ERC20True.decimals)
-            const takingAmount = parseUnits('99', TEST_CONFIG.sui.tokens.ERC20True.decimals)
+            const makingAmount = parseUnits('100', TEST_CONFIG.ethereum.tokens.USDC.decimals)
+            const takingAmount = parseUnits('99', TEST_CONFIG.sui.tokens.USDC.decimals)
 
             try {
                 // Step 1: Fund the test wallet with USDC (using a known donor address)
@@ -657,11 +693,11 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 console.log('💰 Funding test wallet with USDC from donor...')
                 
                 // Check if we need to fund the wallet
-                const initialBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.ERC20True.address)
-                console.log(`Current ERC20True balance: ${initialBalance.toString()}`)
+                const initialBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
+                console.log(`Current USDC balance: ${initialBalance.toString()}`)
                 
                 if (initialBalance < makingAmount) {
-                    console.log(`⚠️ Insufficient ERC20True balance. Have: ${initialBalance.toString()}, Need: ${makingAmount.toString()}`)
+                    console.log(`⚠️ Insufficient USDC balance. Have: ${initialBalance.toString()}, Need: ${makingAmount.toString()}`)
                     console.log('ℹ️ In a test environment, you would need to fund the wallet with test tokens')
                     console.log('ℹ️ For this test, we\'ll skip the actual transfer and assume sufficient balance')
                 }
@@ -672,8 +708,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 const {quote, order, secret} = await orderManager.createOrder(
                     TEST_CONFIG.ethereum.chainId,
                     TEST_CONFIG.sui.chainId,
-                    TEST_CONFIG.ethereum.tokens.ERC20True.address,
-                    TEST_CONFIG.sui.tokens.ERC20True.address,
+                    TEST_CONFIG.ethereum.tokens.USDC.address,
+                    TEST_CONFIG.sui.tokens.USDC.address,
                     makingAmount.toString(),
                     takingAmount.toString(),
                     userAddress
@@ -691,8 +727,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                         maker: new Sdk.Address(makerAddress),
                         makingAmount: makingAmount,
                         takingAmount: takingAmount,
-                        makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address),
-                        takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address)
+                        makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address),
+                        takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address)
                     },
                     {
                         hashLock: Sdk.HashLock.forSingleFill(secret),
@@ -757,7 +793,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 }
 
                 // Step 8: Check final balances
-                const finalBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.ERC20True.address)
+                const finalBalance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
 
                 // Verify the flow completed without critical errors
                 expect(ethResult).toBeDefined()
@@ -788,8 +824,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 const quoteParams = {
                     srcChainId: TEST_CONFIG.ethereum.chainId,
                     dstChainId: TEST_CONFIG.sui.chainId,
-                    srcTokenAddress: TEST_CONFIG.ethereum.tokens.ERC20True.address,
-                    dstTokenAddress: TEST_CONFIG.sui.tokens.ERC20True.address,
+                    srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
+                    dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
                     amount: parseUnits('10', 6).toString(),
                     walletAddress: userAddress,
                     enableEstimate: true
@@ -814,7 +850,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
             // Test balance reading
             try {
-                const balance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.ERC20True.address)
+                const balance = await ethereumResolver.getTokenBalance(TEST_CONFIG.ethereum.tokens.USDC.address)
                 expect(typeof balance).toBe('bigint')
             } catch (error) {
                 // Expected in test environment
@@ -826,21 +862,21 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
         it('should validate test configuration', () => {
             // Validate Ethereum config
             expect(TEST_CONFIG.ethereum.chainId).toBe(1)
-            expect(TEST_CONFIG.ethereum.tokens.ERC20True.address).toMatch(/^0x[a-fA-F0-9]{40}$/)
-            expect(TEST_CONFIG.ethereum.tokens.ERC20True.decimals).toBe(18)
+            expect(TEST_CONFIG.ethereum.tokens.USDC.address).toMatch(/^0x[a-fA-F0-9]{40}$/)
+            expect(TEST_CONFIG.ethereum.tokens.USDC.decimals).toBe(18)
 
             // Validate Sui config
             expect(TEST_CONFIG.sui.chainId).toBe(101)
-            expect(TEST_CONFIG.sui.tokens.ERC20True.address).toContain('::erc20_true::ERC20True')
+            expect(TEST_CONFIG.sui.tokens.USDC.address).toContain('::erc20_true::USDC')
         })
 
-        it('should get quote for Ethereum ERC20True to Sui ERC20True swap', async () => {
+        it('should get quote for Ethereum USDC to Sui USDC swap', async () => {
             const quoteRequest = {
                 srcChainId: TEST_CONFIG.ethereum.chainId,
                 dstChainId: TEST_CONFIG.sui.chainId,
-                srcTokenAddress: TEST_CONFIG.ethereum.tokens.ERC20True.address,
-                dstTokenAddress: TEST_CONFIG.sui.tokens.ERC20True.address,
-                amount: '1000000000000000000', // 1 ERC20True (18 decimals),
+                srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
+                dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
+                amount: '1000000000000000000', // 1 USDC (18 decimals),
                 walletAddress: userAddress,
                 enableEstimate: true
             }
@@ -875,9 +911,9 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                 const quoteParams = {
                     srcChainId: TEST_CONFIG.ethereum.chainId,
                     dstChainId: TEST_CONFIG.sui.chainId,
-                    srcTokenAddress: TEST_CONFIG.ethereum.tokens.ERC20True.address,
-                    dstTokenAddress: TEST_CONFIG.sui.tokens.ERC20True.address,
-                    amount: '100000000000000000000', // 100 ERC20True
+                    srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
+                    dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
+                    amount: '100000000000000000000', // 100 USDC
                     walletAddress: userAddress,
                     enableEstimate: true
                 }
@@ -923,9 +959,9 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             const quoteParams = {
                 srcChainId: TEST_CONFIG.ethereum.chainId,
                 dstChainId: TEST_CONFIG.sui.chainId,
-                srcTokenAddress: TEST_CONFIG.ethereum.tokens.ERC20True.address,
-                dstTokenAddress: TEST_CONFIG.sui.tokens.ERC20True.address,
-                amount: parseUnits('100', 18).toString(), // 100 ERC20True
+                srcTokenAddress: TEST_CONFIG.ethereum.tokens.USDC.address,
+                dstTokenAddress: TEST_CONFIG.sui.tokens.USDC.address,
+                amount: parseUnits('100', 18).toString(), // 100 USDC
                 walletAddress: userAddress,
                 enableEstimate: true
             }
@@ -943,8 +979,8 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                     maker: new Sdk.Address(ethereumResolver.getAddress()),
                     makingAmount: parseUnits('100', 18),
                     takingAmount: parseUnits('100', 18),
-                    makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address),
-                    takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.ERC20True.address)
+                    makerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address),
+                    takerAsset: new Sdk.Address(TEST_CONFIG.ethereum.tokens.USDC.address)
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
@@ -999,7 +1035,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
 
             // Execute withdrawal on Sui using revealed secret
             const suiEscrowResult = await orderManager.executeSuiSwap(
-                parseUnits('99', 18), // 99 ERC20True equivalent in SUI
+                parseUnits('99', 18), // 99 USDC equivalent in SUI
                 secret,
                 userAddress // recipient address
             )
