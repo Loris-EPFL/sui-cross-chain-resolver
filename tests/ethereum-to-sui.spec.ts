@@ -11,6 +11,7 @@ import {getEthereumConfig, getSuiConfig, CONTRACT_ADDRESSES} from './contract-ad
 import {createDirect1inchClient, Direct1inchApiClient} from '../src/utils/direct-api-client'
 import {SuiHTLCBridge} from './sui-contract-bridge'
 import {Resolver} from './resolver'
+import {EscrowFactory} from './escrow-factory'
 import Sdk from '@1inch/cross-chain-sdk'
 import {JsonRpcProvider, Wallet as EthersWallet, parseEther, Signature} from 'ethers'
 import {uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX} from '@1inch/byte-utils'
@@ -78,13 +79,13 @@ class EthereumResolver {
         this.walletClient = createWalletClient({
             account: this.account,
             chain: sepolia,
-            transport: http()
+            transport: http(rpcUrl)
         })
 
         // Create public client
         this.publicClient = createPublicClient({
             chain: sepolia,
-            transport: http()
+            transport: http(rpcUrl)
         })
 
         this.resolverAddress = resolverAddress
@@ -100,7 +101,7 @@ class EthereumResolver {
         signature: string,
         takerTraits: Sdk.TakerTraits,
         amount: bigint
-    ): Promise<{txHash: string; blockHash: string; immutables: any}> {
+    ): Promise<{txHash: string; blockNumber: bigint; immutables: any}> {
         try {
             // Use the Resolver class to construct the transaction request
             const resolver = new Resolver(this.resolverAddress, this.resolverAddress)
@@ -147,7 +148,7 @@ class EthereumResolver {
 
             return {
                 txHash: hash,
-                blockHash: receipt.blockHash,
+                blockNumber: receipt.blockNumber,
                 immutables: immutables.build()
             }
         } catch (error) {
@@ -438,7 +439,7 @@ class CrossChainOrderManager {
             )
             console.log('✅ Token approval completed')
 
-            const {txHash, blockHash, immutables} = await this.ethereumResolver.deploySrc(
+            const {txHash, blockNumber, immutables} = await this.ethereumResolver.deploySrc(
                  1, // Use actual Sepolia chain ID for deployment
                  order,
                  signature,
@@ -446,10 +447,22 @@ class CrossChainOrderManager {
                  amount
              )
 
-            console.log('✅ Deployed source escrow successfully')
+            console.log('✅ Deployed source escrow successfully at block', blockNumber)
 
-            // Get the escrow address using the immutables with deployedAt timestamp
-            const escrowAddress = await this.ethereumResolver.getEscrowAddress(immutables)
+            // Use EscrowFactory to get the srcEscrowEvent from transaction receipt
+            const provider = new JsonRpcProvider('https://g.w.lavanet.xyz:443/gateway/eth/rpc-http/d3630392db153e71701cd89c262c116e')
+            const escrowFactory = new EscrowFactory(provider, this.ethereumResolver.getEscrowFactoryAddress())
+            const srcEscrowEvent = await escrowFactory.getSrcDeployEventFromTxHash(txHash)
+            
+            // Get implementation addresses
+            const ESCROW_SRC_IMPLEMENTATION = await escrowFactory.getSourceImpl()
+            const ESCROW_DST_IMPLEMENTATION = await escrowFactory.getDestinationImpl()
+            
+            // Compute escrow address using SDK like in main.spec.ts
+            const escrowAddress = new Sdk.EscrowFactory(new Sdk.Address(this.ethereumResolver.getEscrowFactoryAddress())).getSrcEscrowAddress(
+                srcEscrowEvent[0],
+                ESCROW_SRC_IMPLEMENTATION
+            ).toString()
             console.log(`📍 Computed escrow address: ${escrowAddress}`)
             return {
                 txHash: txHash,
@@ -857,7 +870,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             } catch (error: any) {
                 console.log('ℹ️ Order creation error (expected in test environment):', error.message)
             }
-        }, 20000)
+        }, 120000)
 
         it('should simulate complete Fusion+ cross-chain swap flow (Ethereum Sepolia → Sui)', async () => {
             // Phase 1: ANNOUNCEMENT - Order Creation (using mock API)
@@ -975,7 +988,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
             expect(secretHash).toBeDefined()
             expect(readyFills).toBeDefined()
             expect(ethResult).toBeDefined()
-        }, 30000)
+        }, 120000)
 
         it('should demonstrate Sui integration points', async () => {
             // This test always passes as it's just documentation
