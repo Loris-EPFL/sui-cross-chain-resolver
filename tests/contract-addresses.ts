@@ -13,11 +13,11 @@ export const CONTRACT_ADDRESSES = {
 
         // Deployed contract addresses from terminal output
 
-        resolver: '0x3dAbB175a6BeF17F17BD6C08D76a159C736feD2f' as `0x${string}`,
-        escrowFactory: '0x4334aB4Ff3Dd4F15B5092A3f4F60634266BA9012' as `0x${string}`,
-        escrowSrcImpl: '0x50Ff57b8056A9e693e4fFF7DEbA40A9b1e26f7AA' as `0x${string}`,
-        escrowDstImpl: '0xb5DDCc23E9f19bEBD6D2d48447123c85c6c3f95B' as `0x${string}`,
-        limitOrderProtocol: '0x88B25C9b2209113b9705B31fbfdd298c1f9ED9ec' as `0x${string}`,
+        resolver: '0xfd1E34f7859FB8b758BcE4ba4fbf1891664960bE' as `0x${string}`,
+        escrowFactory: '0x1948eFaf98abF2C7Df95e7Df4A1618F8F202D28a' as `0x${string}`,
+        escrowSrcImpl: '0x6B17E6fDdc8752919aF841E852fcB1A31F59Fbe9' as `0x${string}`,
+        escrowDstImpl: '0x6D124e34Edc81216F60b710C87F9b1cF138679Ad' as `0x${string}`,
+        limitOrderProtocol: '0xd896FD11857400DDfD92A0824f6108e875670f3f' as `0x${string}`,
 
 
         // Token addresses
@@ -27,7 +27,7 @@ export const CONTRACT_ADDRESSES = {
                 decimals: 18
             },
             USDC: {
-                address: '0xB718FF84779B917B5955a333ae8A1ff431687A7d' as `0x${string}`,
+                address: '0xe4405318d9b679A4309323F84b9e59560d78CC23' as `0x${string}`,
 
                 decimals: 6
             },

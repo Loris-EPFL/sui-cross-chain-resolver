@@ -57,6 +57,7 @@ describe('Ethereum to Sui Cross-Chain Swap', () => {
     }
 
     let src: Chain
+    // Replace dst with Sui configuration
     let suiClient: SuiClient
     let suiKeypair: Ed25519Keypair
     let suiResolver: SuiHTLCBridge
@@ -87,7 +88,7 @@ describe('Ethereum to Sui Cross-Chain Swap', () => {
         const sepoliaConfig = getEthereumConfig('sepolia')
         
         // Get RPC URL from environment or use default
-        const rpcUrl ='https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e'
+        const rpcUrl = process.env.SEPOLIA_RPC_URL || 'https://g.w.lavanet.xyz:443/gateway/sep1/rpc-http/d3630392db153e71701cd89c262c116e'
         
         // Initialize Ethereum provider directly with Lava RPC
         src = {
@@ -251,7 +252,7 @@ describe('Ethereum to Sui Cross-Chain Swap', () => {
                     fillAmount
                 )
             )
-            
+
             console.log(`[${srcChainId}] Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)

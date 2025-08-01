@@ -751,7 +751,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                             dstCancellation: 101n
                         }),
                         srcChainId: 1, // Use Ethereum mainnet ID for SDK compatibility
-                        dstChainId: 137, // Use supported destination chain ID
+                        dstChainId: 102, // Use supported destination chain ID
                         srcSafetyDeposit: parseEther('0.001'),
                         dstSafetyDeposit: parseEther('0.001')
                     },
@@ -1004,7 +1004,7 @@ describe('Ethereum to Sui Cross-Chain Swap with Deployed Contracts', () => {
                         dstCancellation: 101n
                     }),
                     srcChainId: 1,
-                    dstChainId: 137,
+                    dstChainId: 102,
                     srcSafetyDeposit: parseEther('0.001'),
                     dstSafetyDeposit: parseEther('0.001')
                 },
